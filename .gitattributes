@@ -1,0 +1,17 @@
+# Line endings: LF in the repository and in working trees, CRLF only where
+# Windows needs it (cmd.exe misreads .cmd files with bare LF). Binary formats
+# are never converted.
+* text=auto eol=lf
+*.cmd text eol=crlf
+*.bat text eol=crlf
+*.png   binary
+*.gif   binary
+*.jpg   binary
+*.ico   binary
+*.db    binary
+*.mmdb  binary
+*.exe   binary
+*.pdf   binary
+
+# Vendored libraries byte-for-byte (SHA-256 in internal/web/static/vendor/README.md)
+internal/web/static/vendor/** -text

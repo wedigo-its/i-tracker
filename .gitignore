@@ -1,0 +1,22 @@
+# Go-Build
+/_release/
+*.exe
+
+# Local configuration and data (config.yaml contains the token key)
+/config.yaml
+/data/
+*.db
+*.db-wal
+*.db-shm
+
+# Editor / operating system
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Local agent pointer; internal instructions live in ../_docs
+/CLAUDE.md
+
+# GeoLite2 databases are licensed by MaxMind and must not be redistributed here
+/geoip/*.mmdb

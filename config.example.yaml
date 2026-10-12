@@ -1,0 +1,74 @@
+# i-Tracker – example configuration
+# On first start without a config.yaml, a configuration with a random
+# secret_key and listen "0.0.0.0:8000" is created automatically. This file is
+# for reference only.
+#
+# Every key can be overridden with an environment variable
+# IPERF3_<SECTION>_<KEY>, e.g. IPERF3_WEB_LISTEN, IPERF3_STORAGE_PATH,
+# IPERF3_AUTH_SECRET_KEY, IPERF3_AUTH_SESSION_TTL, IPERF3_AUTH_PUBLIC_READ,
+# IPERF3_SCHEDULER_ENABLED, IPERF3_IPERF_PATH, IPERF3_IPERF_AUTO_INSTALL, IPERF3_GEOIP_PATH,
+# IPERF3_MAP_TILE_URL, IPERF3_LOG_LEVEL, IPERF3_LOG_FORMAT.
+# Deprecated aliases (still accepted, logged as warning): LISTEN_ADDR, DB_PATH,
+# SECRET_KEY, SCHEDULER_ENABLED, IPERF3_PATH, IPERF3_AUTO_INSTALL, GEOIP_PATH,
+# LOG_LEVEL.
+
+web:
+  # Without this key the service only listens locally on 127.0.0.1:8000.
+  # 0.0.0.0 makes it reachable from the network.
+  listen: "0.0.0.0:8000"
+
+storage:
+  # Relative to the directory of this file.
+  path: "data/i-tracker.db"
+
+auth:
+  # Key used to sign login sessions. Empty = random on every start
+  # (logins then become invalid after a restart).
+  secret_key: ""
+  # Session lifetime without activity (Go duration, at least 1m). Activity
+  # extends it: once more than half has passed, the session cookie is
+  # renewed. Bearer tokens (API clients) keep their fixed lifetime.
+  session_ttl: "12h"
+  # Guest view: visitors who are not signed in see the dashboard, test
+  # results, traces and servers read-only (without raw iperf3 output and
+  # local paths). Changing anything always requires a sign-in.
+  # false = sign-in required for everything.
+  public_read: true
+
+scheduler:
+  enabled: true
+
+iperf:
+  # Path to the iperf3 binary (version 3.17 or newer); empty = auto-detect.
+  path: ""
+  # Install iperf3 on startup without asking if it is missing (winget or package manager).
+  # Default: off – the web interface asks an administrator before installing.
+  auto_install: false
+
+geoip:
+  # City database for the locations on the map (relative to this file).
+  path: "geoip/city.mmdb"
+  # Download the database automatically and keep it up to date. Without
+  # MaxMind credentials: DB-IP City Lite (no account needed, monthly updates).
+  auto_update: true
+  # Optional: free MaxMind account (https://www.maxmind.com/en/geolite2/signup)
+  # to use GeoLite2 City instead. The license key can also be set via
+  # IPERF3_GEOIP_MAXMIND_LICENSE_KEY.
+  maxmind_account_id: ""
+  maxmind_license_key: ""
+
+map:
+  # Background of the peering map. Empty = embedded offline world map
+  # (Natural Earth, public domain) – no requests to external servers.
+  # Optional own tile server with {z}/{x}/{y} placeholders, e.g.
+  #   tile_url: "https://tiles.example.org/{z}/{x}/{y}.png"
+  # The server is then added to the Content-Security-Policy (img-src).
+  tile_url: ""
+  # Attribution for the tiles (HTML allowed); empty = OpenStreetMap notice.
+  tile_attribution: ""
+
+log:
+  # debug | info | warn | error
+  level: "info"
+  # text | json
+  format: "text"

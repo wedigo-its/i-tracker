@@ -1,0 +1,28 @@
+# i-Tracker: one container with API and web interface at http://<host>:8000
+# Start: docker compose up -d --build
+# Not tested with Docker yet.
+
+services:
+  i-tracker:
+    build:
+      context: .
+      args:
+        BUILD_DATE: docker
+    container_name: i-tracker
+    ports:
+      - "8000:8000"
+    volumes:
+      # config.yaml (including the token key) and database
+      - iperf-data:/data
+    environment:
+      - TZ=Europe/Berlin
+      # IPERF3_<SECTION>_<KEY> overrides config.yaml (old names such as
+      # LOG_LEVEL still work but log a deprecation warning).
+      - IPERF3_WEB_LISTEN=0.0.0.0:8000
+      - IPERF3_SCHEDULER_ENABLED=true
+      - IPERF3_LOG_LEVEL=info
+      - IPERF3_LOG_FORMAT=text
+    restart: unless-stopped
+
+volumes:
+  iperf-data:

@@ -1,0 +1,11 @@
+# Only source code belongs in the build context.
+.git
+_release
+_screenshots
+data
+config.yaml
+*.db
+*.db-wal
+*.db-shm
+*.exe
+geoip
