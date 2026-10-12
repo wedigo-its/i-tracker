@@ -73,6 +73,23 @@ type Server struct {
 	limiter *auth.Limiter
 	// revoked enthält die abgemeldeten Sitzungen bis zu ihrem Ablauf.
 	revoked *auth.Revocations
+
+	// routeList hält die API-Routen für die Produktdokumentation (Routes).
+	routeList []Route
+}
+
+// Route beschreibt eine API-Route für die Produktdokumentation (i-tracker reference).
+// Access: public (immer offen), read (lesend; mit auth.public_read auch für Gäste),
+// user (Anmeldung nötig) oder admin (Administrator).
+type Route struct {
+	Pattern string `json:"route"`
+	Access  string `json:"access"`
+}
+
+// Routes liefert alle API-Routen in der Reihenfolge der Registrierung. Die Oberfläche
+// selbst (/, /static/) zählt nicht dazu.
+func Routes() []Route {
+	return NewServer(Deps{}).routeList
 }
 
 // NewServer erstellt den HTTP-Server.
@@ -104,68 +121,73 @@ func NewServer(d Deps) *Server {
 func (s *Server) Handler() http.Handler { return s.handler }
 
 func (s *Server) routes() {
+	// add registriert eine API-Route und merkt sie sich mit ihrer Zugriffsstufe für die Doku (Routes).
+	add := func(pattern, access string, h http.Handler) {
+		s.mux.Handle(pattern, h)
+		s.routeList = append(s.routeList, Route{Pattern: pattern, Access: access})
+	}
 	// Oberfläche: index.html unter "/", Skripte und Styles unter /static/.
 	s.mux.HandleFunc("GET /{$}", handleIndex)
 	s.mux.Handle("GET /static/", noCache(http.FileServerFS(static)))
 	// Fremdbibliotheken ändern sich nur mit neuen Versionen: einen Tag zwischenspeichern.
 	s.mux.Handle("GET /static/vendor/", cacheFor(24*time.Hour, http.FileServerFS(static)))
-	s.mux.HandleFunc("GET /api/info", s.handleInfo)
-	s.mux.HandleFunc("GET /health", s.handleHealth)
+	add("GET /api/info", "public", http.HandlerFunc(s.handleInfo))
+	add("GET /health", "public", http.HandlerFunc(s.handleHealth))
 	// Lesende Endpunkte der Oberfläche nutzen optionalUser: Mit
 	// auth.public_read dürfen auch Gäste sie aufrufen (u == nil), sonst
 	// verlangen sie wie alle ändernden Endpunkte eine Anmeldung.
-	s.mux.Handle("GET /api/status", s.optionalUser(s.handleStatus))
+	add("GET /api/status", "read", s.optionalUser(s.handleStatus))
 
-	s.mux.HandleFunc("POST /api/auth/login", s.handleLogin)
-	s.mux.HandleFunc("POST /api/auth/logout", s.handleLogout)
-	s.mux.Handle("POST /api/auth/logout-all", s.requireUserPending(s.handleLogoutAll))
-	s.mux.HandleFunc("GET /api/auth/status", s.handleAuthStatus)
-	s.mux.Handle("GET /api/auth/me", s.requireUserPending(s.handleMe))
-	s.mux.Handle("POST /api/auth/change-password", s.requireUserPending(s.handleChangePassword))
-	s.mux.Handle("POST /api/auth/register", s.requireAdmin(s.handleRegister))
-	s.mux.Handle("GET /api/auth/users", s.requireAdmin(s.handleListUsers))
-	s.mux.Handle("DELETE /api/auth/users/{user_id}", s.requireAdmin(s.handleDeleteUser))
+	add("POST /api/auth/login", "public", http.HandlerFunc(s.handleLogin))
+	add("POST /api/auth/logout", "public", http.HandlerFunc(s.handleLogout))
+	add("POST /api/auth/logout-all", "user", s.requireUserPending(s.handleLogoutAll))
+	add("GET /api/auth/status", "public", http.HandlerFunc(s.handleAuthStatus))
+	add("GET /api/auth/me", "user", s.requireUserPending(s.handleMe))
+	add("POST /api/auth/change-password", "user", s.requireUserPending(s.handleChangePassword))
+	add("POST /api/auth/register", "admin", s.requireAdmin(s.handleRegister))
+	add("GET /api/auth/users", "admin", s.requireAdmin(s.handleListUsers))
+	add("DELETE /api/auth/users/{user_id}", "admin", s.requireAdmin(s.handleDeleteUser))
 
-	s.mux.Handle("GET /api/servers", s.optionalUser(s.handleListServers))
-	s.mux.Handle("POST /api/servers", s.requireUser(s.handleCreateServer))
-	s.mux.Handle("GET /api/servers/{server_id}", s.optionalUser(s.handleGetServer))
-	s.mux.Handle("PUT /api/servers/{server_id}", s.requireUser(s.handleUpdateServer))
-	s.mux.Handle("DELETE /api/servers/{server_id}", s.requireUser(s.handleDeleteServer))
+	add("GET /api/servers", "read", s.optionalUser(s.handleListServers))
+	add("POST /api/servers", "user", s.requireUser(s.handleCreateServer))
+	add("GET /api/servers/{server_id}", "read", s.optionalUser(s.handleGetServer))
+	add("PUT /api/servers/{server_id}", "user", s.requireUser(s.handleUpdateServer))
+	add("DELETE /api/servers/{server_id}", "user", s.requireUser(s.handleDeleteServer))
 
-	s.mux.Handle("GET /api/tests", s.optionalUser(s.handleListTests))
-	s.mux.Handle("POST /api/tests/run", s.requireUser(s.handleRunTest))
-	s.mux.Handle("GET /api/tests/{test_id}", s.optionalUser(s.handleGetTest))
-	s.mux.Handle("DELETE /api/tests/{test_id}", s.requireUser(s.handleDeleteTest))
-	s.mux.Handle("GET /api/tests/{test_id}/live", s.optionalUser(s.handleTestLive))
-	s.mux.Handle("GET /api/tests/live/stream", s.optionalUser(s.handleLiveTestsStream))
-	s.mux.Handle("GET /api/tests/server/{server_id}/latest", s.optionalUser(s.handleLatestTest))
+	add("GET /api/tests", "read", s.optionalUser(s.handleListTests))
+	add("POST /api/tests/run", "user", s.requireUser(s.handleRunTest))
+	add("GET /api/tests/{test_id}", "read", s.optionalUser(s.handleGetTest))
+	add("DELETE /api/tests/{test_id}", "user", s.requireUser(s.handleDeleteTest))
+	add("GET /api/tests/{test_id}/live", "read", s.optionalUser(s.handleTestLive))
+	add("GET /api/tests/live/stream", "read", s.optionalUser(s.handleLiveTestsStream))
+	add("GET /api/tests/server/{server_id}/latest", "read", s.optionalUser(s.handleLatestTest))
 
-	s.mux.Handle("GET /api/stats/dashboard", s.optionalUser(s.handleDashboardStats))
-	s.mux.Handle("GET /api/stats/servers", s.optionalUser(s.handleServerStatsList))
-	s.mux.Handle("GET /api/stats/servers/{server_id}", s.optionalUser(s.handleServerStats))
+	add("GET /api/stats/dashboard", "read", s.optionalUser(s.handleDashboardStats))
+	add("GET /api/stats/servers", "read", s.optionalUser(s.handleServerStatsList))
+	add("GET /api/stats/servers/{server_id}", "read", s.optionalUser(s.handleServerStats))
 
-	s.mux.Handle("POST /api/tests/{test_id}/trace", s.requireUser(s.handleStartTestTrace))
-	s.mux.Handle("GET /api/tests/{test_id}/trace", s.optionalUser(s.handleGetTestTrace))
-	s.mux.Handle("DELETE /api/tests/{test_id}/trace", s.requireUser(s.handleDeleteTestTrace))
-	s.mux.Handle("POST /api/traces", s.requireUser(s.handleCreateTrace))
-	s.mux.Handle("GET /api/traces", s.optionalUser(s.handleListTraces))
-	s.mux.Handle("GET /api/traces/{trace_id}", s.optionalUser(s.handleGetTrace))
-	s.mux.Handle("GET /api/traces/test/{test_id}", s.optionalUser(s.handleTracesByTest))
-	s.mux.Handle("DELETE /api/traces/{trace_id}", s.requireUser(s.handleDeleteTrace))
+	add("POST /api/tests/{test_id}/trace", "user", s.requireUser(s.handleStartTestTrace))
+	add("GET /api/tests/{test_id}/trace", "read", s.optionalUser(s.handleGetTestTrace))
+	add("DELETE /api/tests/{test_id}/trace", "user", s.requireUser(s.handleDeleteTestTrace))
+	add("POST /api/traces", "user", s.requireUser(s.handleCreateTrace))
+	add("GET /api/traces", "read", s.optionalUser(s.handleListTraces))
+	add("GET /api/traces/{trace_id}", "read", s.optionalUser(s.handleGetTrace))
+	add("GET /api/traces/test/{test_id}", "read", s.optionalUser(s.handleTracesByTest))
+	add("DELETE /api/traces/{trace_id}", "user", s.requireUser(s.handleDeleteTrace))
 
 	// Startet eine Traceroute zu einem beliebigen Ziel und speichert sie – eine
 	// Aktion, daher auch mit auth.public_read nur für angemeldete Benutzer.
 	// Anmeldung per Sitzungs-Cookie (EventSource) oder Bearer-Token; Fehler als SSE-Event.
-	s.mux.HandleFunc("GET /api/live-trace/stream/{destination}", s.handleLiveTrace)
+	add("GET /api/live-trace/stream/{destination}", "user", http.HandlerFunc(s.handleLiveTrace))
 
-	s.mux.Handle("DELETE /api/admin/cleanup/tests", s.requireAdmin(s.handleCleanupTests))
-	s.mux.Handle("DELETE /api/admin/cleanup/traces", s.requireAdmin(s.handleCleanupTraces))
-	s.mux.Handle("GET /api/admin/stats/database", s.requireAdmin(s.handleDatabaseStats))
-	s.mux.Handle("POST /api/iperf3/install", s.requireAdmin(s.handleInstallIperf))
+	add("DELETE /api/admin/cleanup/tests", "admin", s.requireAdmin(s.handleCleanupTests))
+	add("DELETE /api/admin/cleanup/traces", "admin", s.requireAdmin(s.handleCleanupTraces))
+	add("GET /api/admin/stats/database", "admin", s.requireAdmin(s.handleDatabaseStats))
+	add("POST /api/iperf3/install", "admin", s.requireAdmin(s.handleInstallIperf))
 
 	// Öffentlich: statische Liste ohne Benutzerdaten.
-	s.mux.HandleFunc("GET /api/public-servers", s.handlePublicServers)
-	s.mux.HandleFunc("GET /api/public-servers/search", s.handleSearchPublicServers)
+	add("GET /api/public-servers", "public", http.HandlerFunc(s.handlePublicServers))
+	add("GET /api/public-servers/search", "public", http.HandlerFunc(s.handleSearchPublicServers))
 }
 
 func (s *Server) handleInfo(w http.ResponseWriter, r *http.Request) {

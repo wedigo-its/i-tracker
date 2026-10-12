@@ -74,6 +74,24 @@ func EnvKeys() []string {
 	return out
 }
 
+// KeyInfo beschreibt einen Konfigurationsschlüssel für die Produktdokumentation
+// (i-tracker reference): Schlüssel, Typ, eingebauter Standardwert und Umgebungsvariable.
+type KeyInfo struct {
+	Key     string `json:"key"`
+	Type    string `json:"type"`
+	Default string `json:"default"`
+	Env     string `json:"env"`
+}
+
+// Reference listet alle Konfigurationsschlüssel mit ihren eingebauten Standardwerten.
+func Reference() []KeyInfo {
+	var out []KeyInfo
+	for _, f := range defaults().envFields() {
+		out = append(out, KeyInfo{Key: f.key, Type: f.val.Kind().String(), Default: fmt.Sprint(f.val.Interface()), Env: EnvName(f.key)})
+	}
+	return out
+}
+
 // applyEnv überschreibt Werte aus der Umgebung: zuerst die veralteten
 // Aliase, danach die neuen Namen, die damit Vorrang haben.
 func (c *Config) applyEnv(lookup func(string) (string, bool)) error {

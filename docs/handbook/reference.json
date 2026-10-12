@@ -1,0 +1,303 @@
+{
+  "product": "i-tracker",
+  "config": [
+    {
+      "key": "web.listen",
+      "type": "string",
+      "default": "127.0.0.1:8000",
+      "env": "IPERF3_WEB_LISTEN"
+    },
+    {
+      "key": "storage.path",
+      "type": "string",
+      "default": "data/i-tracker.db",
+      "env": "IPERF3_STORAGE_PATH"
+    },
+    {
+      "key": "auth.secret_key",
+      "type": "string",
+      "default": "",
+      "env": "IPERF3_AUTH_SECRET_KEY"
+    },
+    {
+      "key": "auth.session_ttl",
+      "type": "string",
+      "default": "12h",
+      "env": "IPERF3_AUTH_SESSION_TTL"
+    },
+    {
+      "key": "auth.public_read",
+      "type": "bool",
+      "default": "true",
+      "env": "IPERF3_AUTH_PUBLIC_READ"
+    },
+    {
+      "key": "scheduler.enabled",
+      "type": "bool",
+      "default": "true",
+      "env": "IPERF3_SCHEDULER_ENABLED"
+    },
+    {
+      "key": "iperf.path",
+      "type": "string",
+      "default": "",
+      "env": "IPERF3_IPERF_PATH"
+    },
+    {
+      "key": "iperf.auto_install",
+      "type": "bool",
+      "default": "false",
+      "env": "IPERF3_IPERF_AUTO_INSTALL"
+    },
+    {
+      "key": "geoip.path",
+      "type": "string",
+      "default": "geoip/city.mmdb",
+      "env": "IPERF3_GEOIP_PATH"
+    },
+    {
+      "key": "geoip.auto_update",
+      "type": "bool",
+      "default": "true",
+      "env": "IPERF3_GEOIP_AUTO_UPDATE"
+    },
+    {
+      "key": "geoip.maxmind_account_id",
+      "type": "string",
+      "default": "",
+      "env": "IPERF3_GEOIP_MAXMIND_ACCOUNT_ID"
+    },
+    {
+      "key": "geoip.maxmind_license_key",
+      "type": "string",
+      "default": "",
+      "env": "IPERF3_GEOIP_MAXMIND_LICENSE_KEY"
+    },
+    {
+      "key": "map.tile_url",
+      "type": "string",
+      "default": "",
+      "env": "IPERF3_MAP_TILE_URL"
+    },
+    {
+      "key": "map.tile_attribution",
+      "type": "string",
+      "default": "",
+      "env": "IPERF3_MAP_TILE_ATTRIBUTION"
+    },
+    {
+      "key": "log.level",
+      "type": "string",
+      "default": "info",
+      "env": "IPERF3_LOG_LEVEL"
+    },
+    {
+      "key": "log.format",
+      "type": "string",
+      "default": "text",
+      "env": "IPERF3_LOG_FORMAT"
+    }
+  ],
+  "cli": [
+    {
+      "name": "-config",
+      "default": "config.yaml"
+    },
+    {
+      "name": "-no-tui",
+      "default": "false"
+    },
+    {
+      "name": "-version",
+      "default": "false"
+    },
+    {
+      "name": "service install"
+    },
+    {
+      "name": "service uninstall"
+    },
+    {
+      "name": "service start"
+    },
+    {
+      "name": "service stop"
+    },
+    {
+      "name": "service restart"
+    },
+    {
+      "name": "service status"
+    }
+  ],
+  "api": [
+    {
+      "route": "GET /api/info",
+      "access": "public"
+    },
+    {
+      "route": "GET /health",
+      "access": "public"
+    },
+    {
+      "route": "GET /api/status",
+      "access": "read"
+    },
+    {
+      "route": "POST /api/auth/login",
+      "access": "public"
+    },
+    {
+      "route": "POST /api/auth/logout",
+      "access": "public"
+    },
+    {
+      "route": "POST /api/auth/logout-all",
+      "access": "user"
+    },
+    {
+      "route": "GET /api/auth/status",
+      "access": "public"
+    },
+    {
+      "route": "GET /api/auth/me",
+      "access": "user"
+    },
+    {
+      "route": "POST /api/auth/change-password",
+      "access": "user"
+    },
+    {
+      "route": "POST /api/auth/register",
+      "access": "admin"
+    },
+    {
+      "route": "GET /api/auth/users",
+      "access": "admin"
+    },
+    {
+      "route": "DELETE /api/auth/users/{user_id}",
+      "access": "admin"
+    },
+    {
+      "route": "GET /api/servers",
+      "access": "read"
+    },
+    {
+      "route": "POST /api/servers",
+      "access": "user"
+    },
+    {
+      "route": "GET /api/servers/{server_id}",
+      "access": "read"
+    },
+    {
+      "route": "PUT /api/servers/{server_id}",
+      "access": "user"
+    },
+    {
+      "route": "DELETE /api/servers/{server_id}",
+      "access": "user"
+    },
+    {
+      "route": "GET /api/tests",
+      "access": "read"
+    },
+    {
+      "route": "POST /api/tests/run",
+      "access": "user"
+    },
+    {
+      "route": "GET /api/tests/{test_id}",
+      "access": "read"
+    },
+    {
+      "route": "DELETE /api/tests/{test_id}",
+      "access": "user"
+    },
+    {
+      "route": "GET /api/tests/{test_id}/live",
+      "access": "read"
+    },
+    {
+      "route": "GET /api/tests/live/stream",
+      "access": "read"
+    },
+    {
+      "route": "GET /api/tests/server/{server_id}/latest",
+      "access": "read"
+    },
+    {
+      "route": "GET /api/stats/dashboard",
+      "access": "read"
+    },
+    {
+      "route": "GET /api/stats/servers",
+      "access": "read"
+    },
+    {
+      "route": "GET /api/stats/servers/{server_id}",
+      "access": "read"
+    },
+    {
+      "route": "POST /api/tests/{test_id}/trace",
+      "access": "user"
+    },
+    {
+      "route": "GET /api/tests/{test_id}/trace",
+      "access": "read"
+    },
+    {
+      "route": "DELETE /api/tests/{test_id}/trace",
+      "access": "user"
+    },
+    {
+      "route": "POST /api/traces",
+      "access": "user"
+    },
+    {
+      "route": "GET /api/traces",
+      "access": "read"
+    },
+    {
+      "route": "GET /api/traces/{trace_id}",
+      "access": "read"
+    },
+    {
+      "route": "GET /api/traces/test/{test_id}",
+      "access": "read"
+    },
+    {
+      "route": "DELETE /api/traces/{trace_id}",
+      "access": "user"
+    },
+    {
+      "route": "GET /api/live-trace/stream/{destination}",
+      "access": "user"
+    },
+    {
+      "route": "DELETE /api/admin/cleanup/tests",
+      "access": "admin"
+    },
+    {
+      "route": "DELETE /api/admin/cleanup/traces",
+      "access": "admin"
+    },
+    {
+      "route": "GET /api/admin/stats/database",
+      "access": "admin"
+    },
+    {
+      "route": "POST /api/iperf3/install",
+      "access": "admin"
+    },
+    {
+      "route": "GET /api/public-servers",
+      "access": "public"
+    },
+    {
+      "route": "GET /api/public-servers/search",
+      "access": "public"
+    }
+  ]
+}

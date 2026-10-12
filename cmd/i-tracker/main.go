@@ -20,6 +20,7 @@ import (
 	"os/signal"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"syscall"
 	"time"
 
@@ -49,12 +50,17 @@ func main() {
 		case "service":
 			handleServiceCommand(os.Args[2:])
 			return
+		case "reference":
+			// Referenz für die Produktdokumentation (www.wedigo.net/docs/i-tracker), nicht in der Hilfe.
+			if err := writeReference(os.Stdout); err != nil {
+				fmt.Fprintln(os.Stderr, "reference:", err)
+				os.Exit(1)
+			}
+			return
 		}
 	}
 
-	cfgPath := flag.String("config", "config.yaml", "Pfad zur Konfigurationsdatei")
-	showVersion := flag.Bool("version", false, "Version ausgeben und beenden")
-	flag.Bool("no-tui", false, "Ohne Terminal-Oberfläche starten (ohne Wirkung: der i-Tracker hat keine TUI)")
+	cfgPath, showVersion := defineFlags(flag.CommandLine)
 	flag.Parse()
 
 	if *showVersion {
@@ -326,12 +332,23 @@ func serviceConfigPath(p string) (string, error) {
 	return filepath.Abs(p)
 }
 
+// defineFlags legt die Optionen des Hauptprogramms an (auch für die Produktdokumentation).
+func defineFlags(fs *flag.FlagSet) (cfgPath *string, showVersion *bool) {
+	cfgPath = fs.String("config", "config.yaml", "Pfad zur Konfigurationsdatei")
+	showVersion = fs.Bool("version", false, "Version ausgeben und beenden")
+	fs.Bool("no-tui", false, "Ohne Terminal-Oberfläche starten (ohne Wirkung: der i-Tracker hat keine TUI)")
+	return
+}
+
+// serviceActions sind die Unterbefehle von "i-tracker service" (auch für die Produktdokumentation).
+var serviceActions = []string{"install", "uninstall", "start", "stop", "restart", "status"}
+
 // handleServiceCommand verarbeitet
 //
 //	i-tracker service install|uninstall|start|stop|restart|status [-config pfad]
 func handleServiceCommand(args []string) {
 	usage := func() {
-		fmt.Println("Verwendung: i-tracker service <install|uninstall|start|stop|restart|status> [-config pfad]")
+		fmt.Printf("Verwendung: i-tracker service <%s> [-config pfad]\n", strings.Join(serviceActions, "|"))
 		os.Exit(2)
 	}
 	if len(args) == 0 {

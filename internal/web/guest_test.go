@@ -5,8 +5,6 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
-	"os"
-	"regexp"
 	"strings"
 	"testing"
 	"time"
@@ -63,22 +61,43 @@ var (
 
 type route struct{ method, pattern string }
 
-// apiRoutes liest alle API-Routen aus server.go.
+// apiRoutes liefert alle API-Routen aus der Registrierung in server.go (Routes).
 func apiRoutes(t *testing.T) []route {
 	t.Helper()
-	src, err := os.ReadFile("server.go")
-	if err != nil {
-		t.Fatal(err)
-	}
-	re := regexp.MustCompile(`s\.mux\.Handle(?:Func)?\("([A-Z]+) (/api/[^"]*)"`)
 	var out []route
-	for _, m := range re.FindAllStringSubmatch(string(src), -1) {
-		out = append(out, route{m[1], m[2]})
+	for _, r := range Routes() {
+		method, pattern, ok := strings.Cut(r.Pattern, " ")
+		if ok && strings.HasPrefix(pattern, "/api/") {
+			out = append(out, route{method, pattern})
+		}
 	}
 	if len(out) < 30 {
-		t.Fatalf("nur %d Routen in server.go gefunden", len(out))
+		t.Fatalf("nur %d Routen registriert", len(out))
 	}
 	return out
+}
+
+// TestRouteAccessMatchesGuestLists gleicht die Zugriffsstufe aus der Registrierung
+// (Grundlage der Produktdokumentation) mit den Listen dieses Tests ab.
+func TestRouteAccessMatchesGuestLists(t *testing.T) {
+	for _, r := range Routes() {
+		method, pattern, _ := strings.Cut(r.Pattern, " ")
+		if method != "GET" || !strings.HasPrefix(pattern, "/api/") {
+			continue
+		}
+		var want string
+		switch {
+		case alwaysPublic[pattern]:
+			want = "public"
+		case guestReadable[pattern]:
+			want = "read"
+		case userOnlyGet[pattern]:
+			want = "user|admin"
+		}
+		if want == "" || !strings.Contains(want, r.Access) {
+			t.Errorf("%s: Zugriffsstufe %q passt nicht zur Einordnung %q", r.Pattern, r.Access, want)
+		}
+	}
 }
 
 // guestFixture legt Server, Test (mit Rohausgabe) und Trace an.
