@@ -2,20 +2,20 @@
 setlocal
 
 :: ------------------------------------------------------------
-:: Start-Script  –  i-Tracker
-:: Aufruf:  start.cmd [neu]
+:: Start script  -  i-Tracker
+:: Usage:  start.cmd [rebuild]
 ::
-::   (kein Argument)  startet _release\i-tracker.exe und baut sie vorher,
-::                    falls sie noch nicht existiert
-::   neu              baut die Binary vor dem Start neu (nach Code-Änderungen)
+::   (no argument)  starts _release\i-tracker.exe, building it first
+::                  if it does not exist yet
+::   rebuild        rebuilds the binary before starting (after code changes)
 ::
-:: Die Oberfläche öffnet sich im Browser unter http://localhost:8000.
-:: Beenden mit Strg+C oder durch Schließen des Konsolenfensters.
+:: The web UI opens in the browser at http://localhost:8000.
+:: Stop with Ctrl+C or by closing the console window.
 :: ------------------------------------------------------------
 
 cd /d "%~dp0"
 
-if /I "%~1"=="neu" goto build
+if /I "%~1"=="rebuild" goto build
 if exist "_release\i-tracker.exe" goto run
 
 :build
@@ -23,19 +23,19 @@ call "%~dp0build.cmd" release
 if errorlevel 1 exit /b 1
 
 :run
-:: Läuft bereits eine Instanz auf Port 8000? Dann nur den Browser öffnen.
+:: Is an instance already listening on port 8000? Then just open the browser.
 powershell -NoProfile -Command "if (Get-NetTCPConnection -State Listen -LocalPort 8000 -ErrorAction SilentlyContinue) { exit 0 } else { exit 1 }"
 if not errorlevel 1 (
-    echo [INFO ] i-Tracker laeuft bereits - oeffne nur den Browser.
+    echo [INFO ] i-Tracker is already running - opening the browser only.
     start "" http://localhost:8000
     exit /b 0
 )
 
-:: Browser leicht verzögert öffnen, damit der Dienst schon lauscht.
+:: Open the browser slightly delayed so the server is already listening.
 start "" /min powershell -NoProfile -WindowStyle Hidden -Command "Start-Sleep -Seconds 2; Start-Process 'http://localhost:8000'"
 
-echo [INFO ] Starte i-Tracker - Oberflaeche unter http://localhost:8000
-echo [INFO ] Beenden mit Strg+C
+echo [INFO ] Starting i-Tracker - web UI at http://localhost:8000
+echo [INFO ] Stop with Ctrl+C
 title i-Tracker
 cd /d "%~dp0_release"
 i-tracker.exe
