@@ -93,7 +93,10 @@ code, .mono { font-family: var(--mono); }
   80% { transform: rotate(-55deg); }
   100% { transform: rotate(-55deg); }
 }
-.brand-title { font-size: 1.15em; font-weight: 600; letter-spacing: .2px; color: var(--heading); white-space: nowrap; }
+/* Schriftzug "i-Tracker" (Outfit SemiBold als Pfad, wordmark.svg) als Maske in der Textfarbe;
+   keine Webschrift nötig. Gleiche Schrift in allen wedigo-Produkten. */
+.brand-title { display: block; flex: none; height: 19px; aspect-ratio: 402 / 95; background: var(--heading);
+               -webkit-mask: url(wordmark.svg) center / contain no-repeat; mask: url(wordmark.svg) center / contain no-repeat; }
 .nav-ico { width: 16px; height: 16px; flex: none; }
 .header .actions { display: flex; align-items: center; gap: 10px; margin-left: auto; flex-wrap: nowrap; }
 
@@ -271,7 +274,7 @@ td strong { color: var(--heading); }
 .login-wrap { flex: 1; display: flex; align-items: center; justify-content: center; padding: 40px 16px; }
 .login-card { width: 100%; max-width: 380px; padding: 32px 30px; }
 .login-card .brand { flex-direction: column; gap: 14px; margin-bottom: 26px; }
-.login-card .brand-title { font-size: 1.5em; }
+.login-card .brand-title { height: 26px; }
 .login-card .btn { width: 100%; padding: 11px 16px; margin-top: 6px; }
 .login-card input { width: 100%; }
 .login-note { font-size: 0.85em; color: var(--text); margin-bottom: 14px; line-height: 1.45; padding: 10px 12px; border-radius: 10px;
