@@ -44,7 +44,7 @@ const MaxPasswordBytes = 256
 
 // MinPasswordLength ist die Mindestlänge neuer Passwörter in Zeichen.
 // Bestehende kürzere Passwörter bleiben gültig, geprüft wird nur beim Setzen.
-const MinPasswordLength = 10
+const MinPasswordLength = 8
 
 // ErrInvalidToken wird für fehlerhafte, abgelaufene oder fremd signierte Tokens geliefert.
 var ErrInvalidToken = errors.New("ungültiges Token")

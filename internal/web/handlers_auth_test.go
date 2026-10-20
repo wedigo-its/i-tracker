@@ -62,25 +62,26 @@ func TestForeignTokenRejected(t *testing.T) {
 	expectStatus(t, srv, "GET", "/api/auth/me", foreign, "", http.StatusUnauthorized)
 }
 
-// TestPasswordMinLength: Neue Passwörter brauchen mindestens 10 Zeichen
-// (Zeichen, nicht Byte); bestehende kürzere wie admin123 bleiben gültig.
+// TestPasswordMinLength: Neue Passwörter brauchen mindestens 8 Zeichen
+// (Zeichen, nicht Byte; bis 2026-10-21 zehn); bestehende Passwörter bleiben
+// gültig.
 func TestPasswordMinLength(t *testing.T) {
 	srv := newTestServer(t)
 	admin := login(t, srv, "admin", "admin123")
 
 	var out map[string]any
-	if code := call(t, srv, "POST", "/api/auth/register", admin, `{"username":"neun","email":"n@example.org","password":"123456789"}`, &out); code != http.StatusUnprocessableEntity ||
-		out["detail"] != "Passwort muss mindestens 10 Zeichen lang sein" {
-		t.Errorf("9 Zeichen: Status %d, %v", code, out)
+	if code := call(t, srv, "POST", "/api/auth/register", admin, `{"username":"sieben","email":"s@example.org","password":"1234567"}`, &out); code != http.StatusUnprocessableEntity ||
+		out["detail"] != "Passwort muss mindestens 8 Zeichen lang sein" {
+		t.Errorf("7 Zeichen: Status %d, %v", code, out)
 	}
-	expectStatus(t, srv, "POST", "/api/auth/register", admin, `{"username":"zehn","email":"z@example.org","password":"1234567890"}`, http.StatusOK)
-	// 10 Zeichen mit Umlauten sind mehr als 10 Byte, aber gültig; 9 Umlaute nicht.
-	expectStatus(t, srv, "POST", "/api/auth/register", admin, `{"username":"umlaut9","email":"u9@example.org","password":"äöüäöüäöü"}`, http.StatusUnprocessableEntity)
-	expectStatus(t, srv, "POST", "/api/auth/register", admin, `{"username":"umlaut10","email":"u10@example.org","password":"äöüäöüäöüß"}`, http.StatusOK)
+	expectStatus(t, srv, "POST", "/api/auth/register", admin, `{"username":"acht","email":"a@example.org","password":"12345678"}`, http.StatusOK)
+	// 8 Zeichen mit Umlauten sind mehr als 8 Byte, aber gültig; 7 Umlaute nicht.
+	expectStatus(t, srv, "POST", "/api/auth/register", admin, `{"username":"umlaut7","email":"u7@example.org","password":"äöüäöüä"}`, http.StatusUnprocessableEntity)
+	expectStatus(t, srv, "POST", "/api/auth/register", admin, `{"username":"umlaut8","email":"u8@example.org","password":"äöüäöüäö"}`, http.StatusOK)
 
-	expectStatus(t, srv, "POST", "/api/auth/change-password", admin, `{"current_password":"admin123","new_password":"123456789"}`, http.StatusUnprocessableEntity)
+	expectStatus(t, srv, "POST", "/api/auth/change-password", admin, `{"current_password":"admin123","new_password":"1234567"}`, http.StatusUnprocessableEntity)
 	expectStatus(t, srv, "POST", "/api/auth/change-password", admin, `{"current_password":"admin123","new_password":"`+strings.Repeat("x", 257)+`"}`, http.StatusUnprocessableEntity)
-	expectStatus(t, srv, "POST", "/api/auth/change-password", admin, `{"current_password":"admin123","new_password":"1234567890"}`, http.StatusOK)
+	expectStatus(t, srv, "POST", "/api/auth/change-password", admin, `{"current_password":"admin123","new_password":"12345678"}`, http.StatusOK)
 }
 
 // TestChangePasswordEndsOtherSessions: Nach dem Passwortwechsel gelten alle

@@ -148,7 +148,7 @@ function leavePage() {
 
 // Mindestlänge neuer Passwörter in Zeichen (wie auth.MinPasswordLength auf
 // dem Server). Bestehende kürzere Passwörter bleiben für die Anmeldung gültig.
-const MIN_PASSWORD_LENGTH = 10;
+const MIN_PASSWORD_LENGTH = 8;
 
 // passwordError prüft ein neues Passwort und liefert die Fehlermeldung oder ''.
 // Gezählt werden Zeichen (Codepoints), nicht UTF-16-Einheiten.

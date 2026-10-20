@@ -55,7 +55,7 @@ docker compose up -d
 
 ## setup | Einrichtung
 
-**Anmelden:** Beim ersten Start legt i-Tracker den Benutzer `admin` mit einem zufälligen Startpasswort an. Es steht einmalig im Konsolenfenster. Läuft i-Tracker schon als Dienst, finden Sie es in der Datei `initial-admin-password.txt` im Programmordner. Nach der ersten Anmeldung vergeben Sie ein eigenes Passwort (mindestens 10 Zeichen). Löschen Sie die Datei danach.
+**Anmelden:** Beim ersten Start legt i-Tracker den Benutzer `admin` mit einem zufälligen Startpasswort an. Es steht einmalig im Konsolenfenster. Läuft i-Tracker schon als Dienst, finden Sie es in der Datei `initial-admin-password.txt` im Programmordner. Nach der ersten Anmeldung vergeben Sie ein eigenes Passwort (mindestens 8 Zeichen). Löschen Sie die Datei danach.
 
 **iperf3 installieren:** Fehlt iperf3, zeigt der Statuspunkt oben rechts einen Hinweis. Als Administrator können Sie es dort mit einem Klick installieren lassen. Unter Windows geschieht das über winget. Danach kann ein Neustart des Dienstes nötig sein.
 

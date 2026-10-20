@@ -275,7 +275,7 @@ const STRINGS = {
 
   // Passwort
   'pw.current':           ['Aktuelles Passwort', 'Current password'],
-  'pw.new':               ['Neues Passwort (mind. 10 Zeichen)', 'New password (at least 10 characters)'],
+  'pw.new':               ['Neues Passwort (mind. 8 Zeichen)', 'New password (at least 8 characters)'],
   'pw.repeat':            ['Neues Passwort wiederholen', 'Repeat new password'],
   'pw.change':            ['Ändern', 'Change'],
   'pw.mismatch':          ['Die neuen Passwörter stimmen nicht überein.', 'The new passwords do not match.'],
@@ -313,7 +313,7 @@ const STRINGS = {
   'admin.createUser':     ['Benutzer anlegen', 'Create user'],
   'admin.ufName':         ['Benutzername *', 'Username *'],
   'admin.ufMail':         ['E-Mail *', 'Email *'],
-  'admin.ufPass':         ['Passwort * (mind. 10 Zeichen)', 'Password * (at least 10 characters)'],
+  'admin.ufPass':         ['Passwort * (mind. 8 Zeichen)', 'Password * (at least 8 characters)'],
   'admin.ufAdmin':        ['Administrator (darf Benutzer verwalten und Daten bereinigen)', 'Administrator (may manage users and clean up data)'],
   'admin.create':         ['Anlegen', 'Create'],
   'admin.userCreated':    ['Benutzer „{name}“ angelegt', 'User “{name}” created'],
