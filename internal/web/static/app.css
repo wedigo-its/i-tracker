@@ -303,6 +303,12 @@ td strong { color: var(--heading); }
 .ds-card.spaced { margin-bottom: 18px; }
 @media (max-width: 560px) { .form-grid { grid-template-columns: 1fr; } }
 
+/* Software update card */
+.update-card { max-width: 720px; }
+.update-card .ds-stats { margin-bottom: 14px; }
+.update-note a { color: var(--accent); }
+.btn-row { display: flex; flex-wrap: wrap; gap: 10px; }
+
 /* ---------- Tests ---------- */
 .live-panel { display: flex; flex-direction: column; min-height: 100%; }
 .live-info { display: flex; flex-direction: column; flex: 1; }

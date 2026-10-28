@@ -48,6 +48,7 @@ var (
 		"/api/auth/me":              true,
 		"/api/auth/users":           true,
 		"/api/admin/stats/database": true,
+		"/api/update":               true,
 		// Starts a trace (own test, errors as SSE events).
 		"/api/live-trace/stream/{destination}": true,
 	}

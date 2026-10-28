@@ -320,6 +320,20 @@
         </div>
       </div>
     </div>
+
+    <div class="section">
+      <div class="section-title" data-i18n="update.title">Software-Update</div>
+      <div class="ds-card update-card">
+        <div class="ds-header"><span class="ds-name" data-i18n="update.title">Software-Update</span><span id="updBadge"></span></div>
+        <div class="ds-stats" id="updStats"></div>
+        <p class="desc update-note" id="updNote" hidden></p>
+        <p class="desc text-crit" id="updError" hidden></p>
+        <div class="btn-row">
+          <button class="btn btn-secondary" id="updCheck" data-click="adminPage.checkUpdate" data-i18n="update.check">Jetzt prüfen</button>
+          <button class="btn" id="updInstall" data-click="adminPage.installUpdate" data-i18n="update.installBtn" hidden>Installieren</button>
+        </div>
+      </div>
+    </div>
   </div>
 </main>
 

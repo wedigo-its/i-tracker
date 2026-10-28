@@ -110,5 +110,27 @@
   "public.desc.by": "Öffentlicher iperf3-Server von %s",
   "public.desc.by_in": "Öffentlicher iperf3-Server von %s in %s",
   "public.desc.server_by_in": "Öffentlicher Server von %s in %s",
-  "public.desc.test_by": "Öffentlicher Testserver von %s"
+  "public.desc.test_by": "Öffentlicher Testserver von %s",
+
+  "err.update.not_configured": "Automatische Updates sind nicht eingerichtet",
+  "err.update.off": "Automatische Updates sind ausgeschaltet",
+  "err.update.fetch_manifest": "Release-Beschreibung konnte nicht geladen werden: %s",
+  "err.update.fetch_signature": "Signatur konnte nicht geladen werden: %s",
+  "err.update.decode_signature": "Signatur konnte nicht gelesen werden: %s",
+  "err.update.bad_signature": "Die Signatur der Release-Beschreibung ist ungültig",
+  "err.update.decode_manifest": "Release-Beschreibung konnte nicht gelesen werden: %s",
+  "err.update.no_binary": "Keine Programmdatei für %s in Release %s",
+  "err.update.download": "Programmdatei konnte nicht heruntergeladen werden: %s",
+  "err.update.checksum": "Prüfsumme stimmt nicht: erwartet %s, erhalten %s",
+  "err.update.backup": "Laufende Programmdatei konnte nicht gesichert werden: %s",
+  "err.update.install_binary": "Neue Programmdatei konnte nicht eingesetzt werden: %s",
+  "err.update.no_backup": "Keine Sicherung zum Zurücksetzen vorhanden",
+  "err.update.move_aside": "Laufende Programmdatei konnte nicht beiseitegelegt werden: %s",
+  "err.update.restore": "Sicherung konnte nicht wiederhergestellt werden: %s",
+  "err.update.restore_partial": "Vorige Version wiederhergestellt, die ersetzte Programmdatei liegt aber noch unter %s: %s",
+  "err.update.http": "Abruf von %s fehlgeschlagen: %s",
+  "err.update.mode": "Ungültiger Update-Modus „%s“ (auto, notify oder off)",
+  "err.update.window": "Ungültiges Update-Zeitfenster „%s“ (HH:MM-HH:MM)",
+  "err.update.install": "Installation von %s fehlgeschlagen: %s",
+  "err.update.rollback": "Zurücksetzen von %s auf %s fehlgeschlagen: %s"
 }

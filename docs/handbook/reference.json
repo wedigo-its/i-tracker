@@ -86,6 +86,24 @@
       "env": "IPERF3_MAP_TILE_ATTRIBUTION"
     },
     {
+      "key": "update.mode",
+      "type": "string",
+      "default": "auto",
+      "env": "IPERF3_UPDATE_MODE"
+    },
+    {
+      "key": "update.interval",
+      "type": "string",
+      "default": "6h",
+      "env": "IPERF3_UPDATE_INTERVAL"
+    },
+    {
+      "key": "update.window",
+      "type": "string",
+      "default": "",
+      "env": "IPERF3_UPDATE_WINDOW"
+    },
+    {
       "key": "log.level",
       "type": "string",
       "default": "info",
@@ -128,6 +146,9 @@
     },
     {
       "name": "service status"
+    },
+    {
+      "name": "rollback"
     }
   ],
   "api": [
@@ -289,6 +310,18 @@
     },
     {
       "route": "POST /api/iperf3/install",
+      "access": "admin"
+    },
+    {
+      "route": "GET /api/update",
+      "access": "admin"
+    },
+    {
+      "route": "POST /api/update/check",
+      "access": "admin"
+    },
+    {
+      "route": "POST /api/update/install",
       "access": "admin"
     },
     {

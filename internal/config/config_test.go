@@ -163,3 +163,31 @@ func TestPublicRead(t *testing.T) {
 		t.Error("from env: public_read on")
 	}
 }
+
+// TestUpdate: self-update defaults to auto every 6h; mode, interval and window are validated.
+func TestUpdate(t *testing.T) {
+	cfg, err := Load(writeConfig(t, "log:\n  level: info\n"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if d, _ := cfg.Update.IntervalDuration(); cfg.Update.Mode != "auto" || d != 6*time.Hour || cfg.Update.Window != "" {
+		t.Errorf("defaults: %+v", cfg.Update)
+	}
+	created, err := CreateDefault(filepath.Join(t.TempDir(), "config.yaml"))
+	if err != nil || created.Update.Mode != "auto" || created.Update.Interval != "6h" {
+		t.Errorf("CreateDefault: %+v, %v", created.Update, err)
+	}
+	cfg, err = Load(writeConfig(t, "update:\n  mode: notify\n  interval: 12h\n  window: \"02:00-05:00\"\n"))
+	if err != nil || cfg.Update.Mode != "notify" || cfg.Update.Window != "02:00-05:00" {
+		t.Errorf("from file: %+v, %v", cfg.Update, err)
+	}
+	c := defaults()
+	if err := c.applyEnv(func(k string) (string, bool) { return "off", k == "IPERF3_UPDATE_MODE" }); err != nil || c.Update.Mode != "off" {
+		t.Errorf("from env: %+v, %v", c.Update, err)
+	}
+	for _, bad := range []string{"update:\n  mode: sometimes\n", "update:\n  interval: 30s\n", "update:\n  window: \"2-5\"\n"} {
+		if _, err := Load(writeConfig(t, bad)); err == nil {
+			t.Errorf("%q accepted", bad)
+		}
+	}
+}

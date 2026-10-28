@@ -5,6 +5,7 @@
 //
 //	i-tracker [-config config.yaml] [-version] [-no-tui]
 //	i-tracker service install|uninstall|start|stop|restart|status [-config path]
+//	i-tracker rollback
 package main
 
 import (
@@ -21,6 +22,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 
@@ -32,6 +34,7 @@ import (
 	"i-tracker/internal/i18n"
 	"i-tracker/internal/iperf"
 	"i-tracker/internal/scheduler"
+	"i-tracker/internal/selfupdate"
 	"i-tracker/internal/store"
 	"i-tracker/internal/svc"
 	"i-tracker/internal/trace"
@@ -51,6 +54,14 @@ func main() {
 		case "service":
 			handleServiceCommand(os.Args[2:])
 			return
+		case "rollback":
+			// Restore the binary the last self-update replaced.
+			if err := selfupdate.Rollback(); err != nil {
+				fmt.Fprintln(os.Stderr, "rollback:", err)
+				os.Exit(1)
+			}
+			fmt.Println("Previous version restored. Restart the service to run it: i-tracker service restart")
+			return
 		case "reference":
 			// Reference for the product documentation (www.wedigo.net/docs/i-tracker), not listed in the help.
 			if err := writeReference(os.Stdout); err != nil {
@@ -61,6 +72,7 @@ func main() {
 		}
 	}
 
+	flag.Usage = usage
 	cfgPath, showVersion := defineFlags(flag.CommandLine)
 	flag.Parse()
 
@@ -76,10 +88,39 @@ func main() {
 		<-sig
 		close(stop)
 	}()
-	if err := run(*cfgPath, os.Stderr, stop); err != nil {
+	// In the foreground nothing restarts the process after an update.
+	if err := run(*cfgPath, os.Stderr, stop, nil); err != nil {
 		fmt.Fprintln(os.Stderr, "Error:", err)
 		os.Exit(1)
 	}
+}
+
+func usage() {
+	out := flag.CommandLine.Output()
+	fmt.Fprintf(out, "%s %s\n\nUsage:\n  i-tracker [options]\n  i-tracker service <%s> [-config path]\n  i-tracker rollback    Restore the binary replaced by the last self-update\n\nOptions:\n",
+		version.Name, version.Version, strings.Join(serviceActions, "|"))
+	flag.PrintDefaults()
+}
+
+// newUpdateManager builds the self-updater from the update section; restart
+// is nil when nothing would restart the process (foreground run).
+func newUpdateManager(cfg *config.Config, restart func()) *selfupdate.Manager {
+	// Load has validated mode, interval and window already.
+	mode, _ := selfupdate.ParseMode(cfg.Update.Mode)
+	window, _ := selfupdate.ParseWindow(cfg.Update.Window)
+	interval, _ := cfg.Update.IntervalDuration()
+	// Feed and key are built in; no setting redirects them.
+	return selfupdate.NewManager(selfupdate.Options{
+		Updater:   selfupdate.New(selfupdate.DefaultFeedURL, selfupdate.ReleasePublicKey()),
+		Mode:      mode,
+		Interval:  interval,
+		Window:    window,
+		Program:   "i-tracker",
+		Current:   version.Version,
+		Restart:   restart,
+		Container: selfupdate.InContainer(),
+		Logger:    slog.Default().With("component", "update"),
+	})
 }
 
 // newLogger sets up slog from log.level and log.format.
@@ -92,8 +133,9 @@ func newLogger(out io.Writer, cfg config.LogConfig) *slog.Logger {
 }
 
 // run loads the config, starts all services and blocks until stop is closed
-// or the HTTP server fails.
-func run(cfgPath string, logOut io.Writer, stop <-chan struct{}) error {
+// or the HTTP server fails. restart brings up a freshly installed update (nil
+// in the foreground).
+func run(cfgPath string, logOut io.Writer, stop <-chan struct{}, restart func()) error {
 	// --- Config: load, or create on first start ---
 	var (
 		cfg     *config.Config
@@ -198,6 +240,20 @@ func run(cfgPath string, logOut io.Writer, stop <-chan struct{}) error {
 		slog.Info("Scheduler disabled by configuration")
 	}
 
+	// --- Self-update ---
+	updates := newUpdateManager(cfg, restart)
+	switch st := updates.Status(); {
+	case st.Container:
+		slog.Info("Self-update off in the container; update by pulling a new image", "component", "update")
+	case !st.Enabled:
+		slog.Info("Self-update off by configuration (update.mode)", "component", "update")
+	default:
+		slog.Info("Self-update on", "component", "update", "mode", st.Mode, "feed", st.FeedURL, "window", st.Window, "blocked", st.Blocked)
+	}
+	updCtx, updCancel := context.WithCancel(context.Background())
+	defer updCancel()
+	go updates.Run(updCtx)
+
 	// --- HTTP server ---
 	if cfg.Map.TileURL != "" {
 		slog.Info("Peering map uses a tile server", "tile_url", cfg.Map.TileURL)
@@ -226,6 +282,7 @@ func run(cfgPath string, logOut io.Writer, stop <-chan struct{}) error {
 				info.Updating = geoUpdater.Updating()
 				return info
 			},
+			Updates: updates,
 		}).Handler(),
 		ReadHeaderTimeout: 10 * time.Second,
 	}
@@ -261,28 +318,86 @@ func run(cfgPath string, logOut io.Writer, stop <-chan struct{}) error {
 
 // program binds run to the service manager (kardianos/service).
 type program struct {
-	cfgPath string
-	logOut  io.Writer
-	stop    chan struct{}
-	done    chan struct{}
+	cfgPath  string
+	logOut   io.Writer
+	stop     chan struct{}
+	stopOnce sync.Once
+	done     chan struct{}
 }
 
 func (p *program) Start(service.Service) error {
+	// Until run reads the config, log to the service log.
+	slog.SetDefault(slog.New(slog.NewTextHandler(p.logOut, nil)))
+	// A freshly installed update counts its start attempts before anything
+	// else can fail; once they run out, the previous binary is restored and
+	// this process exits so the service manager starts that one.
+	recovery, err := selfupdate.Recover(version.Version)
+	if recovery.RolledBack {
+		slog.Error("The updated version did not come up healthy; previous version restored",
+			"component", "update", "failed", recovery.To, "restored", recovery.From, "starts", recovery.Attempt-1)
+		os.Exit(1)
+	}
+	if err != nil {
+		slog.Warn("Self-update state could not be read", "component", "update", "error", err)
+	}
+	if recovery.Attempt > 0 {
+		slog.Info("Starting freshly updated version", "component", "update",
+			"from", recovery.From, "to", recovery.To, "attempt", recovery.Attempt)
+	}
+	if err := svc.EnsureRecovery(); err != nil {
+		slog.Warn("Service recovery actions could not be set; a failed update is then not restarted and rolled back",
+			"component", "svc", "error", err)
+	}
+
 	p.stop = make(chan struct{})
 	p.done = make(chan struct{})
 	go func() {
 		defer close(p.done)
-		if err := run(p.cfgPath, p.logOut, p.stop); err != nil {
+		if err := run(p.cfgPath, p.logOut, p.stop, p.restart); err != nil {
 			slog.Error("Service stopped", "error", err)
 			fmt.Fprintln(p.logOut, "Error:", err)
+			p.abortPending(err)
 			os.Exit(1)
 		}
 	}()
 	return nil
 }
 
+// abortPending rolls a freshly installed update back at once when it fails
+// (bad config for the new version, port conflict, ...); the caller exits
+// with an error, so the service manager starts the restored binary. Without
+// a pending update of this version it does nothing.
+func (p *program) abortPending(cause error) {
+	rec, err := selfupdate.AbortPending(version.Version)
+	if rec.RolledBack {
+		slog.Error("The updated version failed to start; previous version restored",
+			"component", "update", "failed", rec.To, "restored", rec.From, "error", cause)
+	}
+	if err != nil {
+		slog.Error("Self-update rollback failed", "component", "update", "error", err)
+	}
+}
+
+// restart brings up the binary a self-update just installed. On Windows a
+// detached helper restarts the service through the SCM, on Linux systemctl
+// --no-block. Elsewhere, or when that fails, the service shuts down
+// gracefully and the process exits with an error, which the service manager
+// (systemd Restart=on-failure, the Windows recovery actions) answers with a
+// start.
+func (p *program) restart() {
+	if err := svc.RestartDetached(); err == nil {
+		slog.Info("Restarting the service", "component", "svc")
+		return
+	} else if runtime.GOOS == "windows" {
+		slog.Warn("Self-update: detached restart failed; exiting for the recovery actions", "component", "update", "error", err)
+	}
+	_ = p.Stop(nil)
+	os.Exit(75)
+}
+
 func (p *program) Stop(service.Service) error {
-	close(p.stop)
+	// Called by the service manager and by restart; close only once.
+	p.stopOnce.Do(func() { close(p.stop) })
 	select {
 	case <-p.done:
 	case <-time.After(15 * time.Second):
@@ -366,6 +481,10 @@ func handleServiceCommand(args []string) {
 		if path, err = serviceConfigPath(*cfgFlag); err == nil {
 			if err = svc.Install(path); err == nil {
 				fmt.Printf("Service %q installed (%s), configuration: %s\n", svc.Name, svc.Platform(), path)
+				// The self-updater relies on the service manager restarting a crashed service.
+				if rerr := svc.EnsureRecovery(); rerr != nil {
+					fmt.Println("Warning: service recovery actions could not be set:", rerr)
+				}
 			}
 		}
 	case "uninstall":

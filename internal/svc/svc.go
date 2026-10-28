@@ -35,8 +35,11 @@ func config(cfgPath string) *service.Config {
 		Option:           service.KeyValue{},
 	}
 	// systemd: start after the network (on Windows these would be service names).
+	// Restart only after a failure: the self-updater exits with an error to be
+	// restarted (and rolled back), a stop by the admin stays a stop.
 	if runtime.GOOS == "linux" {
 		cfg.Dependencies = []string{"After=network-online.target", "Wants=network-online.target"}
+		cfg.Option["Restart"] = "on-failure"
 	}
 	// Optional service account from the environment (as in Spherifyer).
 	if user := os.Getenv("SERVICE_ACCOUNT_USER"); user != "" {

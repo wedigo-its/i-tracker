@@ -110,5 +110,27 @@
   "public.desc.by": "Public iperf3 server by %s",
   "public.desc.by_in": "Public iperf3 server by %s in %s",
   "public.desc.server_by_in": "Public server by %s in %s",
-  "public.desc.test_by": "Public test server by %s"
+  "public.desc.test_by": "Public test server by %s",
+
+  "err.update.not_configured": "Automatic updates are not set up",
+  "err.update.off": "Automatic updates are off",
+  "err.update.fetch_manifest": "Could not load the release description: %s",
+  "err.update.fetch_signature": "Could not load the signature: %s",
+  "err.update.decode_signature": "Could not read the signature: %s",
+  "err.update.bad_signature": "The signature of the release description is invalid",
+  "err.update.decode_manifest": "Could not read the release description: %s",
+  "err.update.no_binary": "No program file for %s in release %s",
+  "err.update.download": "Could not download the program file: %s",
+  "err.update.checksum": "Checksum mismatch: expected %s, got %s",
+  "err.update.backup": "Could not back up the current program file: %s",
+  "err.update.install_binary": "Could not put the new program file in place: %s",
+  "err.update.no_backup": "There is no backup to roll back to",
+  "err.update.move_aside": "Could not move the current program file aside: %s",
+  "err.update.restore": "Could not restore the backup: %s",
+  "err.update.restore_partial": "Previous version restored, but the replaced program file remains at %s: %s",
+  "err.update.http": "Request to %s failed: %s",
+  "err.update.mode": "Invalid update mode \"%s\" (use auto, notify or off)",
+  "err.update.window": "Invalid update window \"%s\" (use HH:MM-HH:MM)",
+  "err.update.install": "Installing %s failed: %s",
+  "err.update.rollback": "Rolling back %s to %s failed: %s"
 }

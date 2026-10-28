@@ -1943,8 +1943,9 @@ const adminPage = {
   enter() {
     this.syncCleanup();
     this.load();
+    this.loadUpdate();
   },
-  onLang() { this.load(); },
+  onLang() { this.load(); this.loadUpdate(); },
 
   async load() {
     try {
@@ -2103,6 +2104,122 @@ const adminPage = {
     } catch (e) {
       notify(e.message, 'err');
     }
+  },
+
+  // ----- Software update -----
+  update: null,
+  // waiting is set while the service restarts into a freshly installed version.
+  waiting: false,
+
+  async loadUpdate() {
+    try {
+      this.update = await apiGet('/update');
+      this.renderUpdate();
+    } catch (e) {
+      if (e.status !== 401) notify(t('update.loadFailed', { msg: e.message }), 'err');
+    }
+  },
+
+  renderUpdate() {
+    const st = this.update;
+    if (!st) return;
+    const row = (label, val) => `<div class="stat"><span class="stat-label">${esc(label)}</span><span class="stat-val">${esc(val)}</span></div>`;
+    let mode = t('update.mode.' + (st.enabled ? st.mode : 'off'));
+    if (st.enabled && st.window) mode = t('update.modeWindow', { mode, window: st.window });
+    document.getElementById('updStats').innerHTML =
+      row(t('update.current'), st.current || '–') +
+      row(t('update.latest'), st.latest || '–') +
+      row(t('update.modeLabel'), mode) +
+      row(t('update.checked'), st.checked ? fmtDate(st.checked) : t('update.never'));
+
+    let badge = '';
+    if (!st.enabled) badge = `<span class="sev-badge sev-info">${t('update.badgeOff')}</span>`;
+    else if (st.installed) badge = `<span class="sev-badge sev-warn">${t('update.badgeInstalled')}</span>`;
+    else if (st.available) badge = `<span class="sev-badge sev-warn">${t('update.badgeAvailable')}</span>`;
+    else if (st.latest) badge = `<span class="sev-badge sev-ok">${t('update.badgeCurrent')}</span>`;
+    document.getElementById('updBadge').innerHTML = badge;
+
+    // One note: why nothing happens automatically, or what happens next.
+    let note = '';
+    if (st.container) note = esc(t('update.blocked.container'));
+    else if (!st.enabled) note = esc(t('update.offNote'));
+    else if (st.installed) note = esc(t(st.restarting ? 'update.restarting' : 'update.restartManually', { v: st.installed }));
+    else if (st.blocked && st.mode === 'auto') note = esc(t('update.blocked.' + st.blocked));
+    if (!st.installed && st.available && st.notes) {
+      const notes = /^https:\/\//.test(st.notes)
+        ? `<a href="${esc(st.notes)}" target="_blank" rel="noopener">${t('update.notesLink')}</a>`
+        : esc(st.notes);
+      note = (note ? note + ' ' : '') + t('update.notes', { notes });
+    }
+    const noteEl = document.getElementById('updNote');
+    noteEl.innerHTML = note;
+    noteEl.hidden = !note;
+    const errEl = document.getElementById('updError');
+    errEl.textContent = st.error ? t('update.error', { msg: st.error }) : '';
+    errEl.hidden = !st.error;
+
+    document.getElementById('updCheck').hidden = !st.enabled;
+    document.getElementById('updCheck').disabled = this.waiting;
+    const install = document.getElementById('updInstall');
+    install.hidden = !(st.enabled && st.available && !st.installed);
+    install.disabled = this.waiting;
+  },
+
+  async checkUpdate() {
+    const btn = document.getElementById('updCheck');
+    btn.disabled = true;
+    try {
+      this.update = await api('POST', '/update/check');
+      this.renderUpdate();
+      if (!this.update.error) notify(t(this.update.available ? 'update.found' : 'update.none', { v: this.update.latest }));
+    } catch (e) {
+      notify(e.message, 'err');
+    } finally {
+      btn.disabled = this.waiting;
+    }
+  },
+
+  async installUpdate() {
+    const st = this.update;
+    if (!st || !st.available) return;
+    if (!await confirmDialog(t('update.installQ'), t('update.installText', { from: st.current, to: st.latest }), t('update.installBtn'), false)) return;
+    const btn = document.getElementById('updInstall');
+    btn.disabled = true;
+    try {
+      this.update = await api('POST', '/update/install');
+      this.renderUpdate();
+      if (this.update.error) notify(t('update.failed', { msg: this.update.error }), 'err');
+      else if (this.update.restarting) this.waitForRestart(this.update.current, this.update.installed);
+      else if (this.update.installed) notify(t('update.restartManually', { v: this.update.installed }), 'warn');
+    } catch (e) {
+      notify(t('update.failed', { msg: e.message }), 'err');
+    } finally {
+      btn.disabled = this.waiting;
+    }
+  },
+
+  // waitForRestart polls /api/info until another version answers, then reloads the page.
+  async waitForRestart(from, to) {
+    this.waiting = true;
+    this.renderUpdate();
+    const deadline = Date.now() + 3 * 60 * 1000;
+    while (Date.now() < deadline) {
+      await new Promise(r => setTimeout(r, 3000));
+      try {
+        const res = await fetch('/api/info', { cache: 'no-store' });
+        const info = res.ok ? await res.json() : null;
+        if (info && info.version && info.version !== from) {
+          notify(t('update.restarted', { v: info.version }));
+          setTimeout(() => window.location.reload(), 1500);
+          return;
+        }
+      } catch (e) {
+        // Not reachable while the service restarts.
+      }
+    }
+    this.waiting = false;
+    this.renderUpdate();
+    notify(t('update.restartTimeout', { v: to }), 'err');
   },
 };
 pages.admin = adminPage;

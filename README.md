@@ -102,7 +102,8 @@ start.cmd
 
 Builds `_release\i-tracker.exe` on the first run, starts it in the console
 (stop with Ctrl+C) and opens http://localhost:8000. After code changes,
-rebuild with `start.cmd neu` or `build.cmd release`.
+rebuild with `start.cmd rebuild` or `build.cmd release`. `build.cmd linux`
+builds static Linux binaries (amd64, arm64) into `_release\linux-*\`.
 
 First login: user **`admin`** with the **random initial password** that is
 printed once to the console/log on the very first start (`initial_password=…`).
@@ -148,6 +149,9 @@ former names without prefix still work but log a deprecation warning.
 | `geoip.maxmind_license_key` | `IPERF3_GEOIP_MAXMIND_LICENSE_KEY` | – | empty = DB-IP City Lite |
 | `map.tile_url` | `IPERF3_MAP_TILE_URL` | – | empty = embedded offline world map |
 | `map.tile_attribution` | `IPERF3_MAP_TILE_ATTRIBUTION` | – | OpenStreetMap notice |
+| `update.mode` | `IPERF3_UPDATE_MODE` | – | `auto` (`auto`, `notify` or `off`, see [Updates](#updates)) |
+| `update.interval` | `IPERF3_UPDATE_INTERVAL` | – | `6h` (at least `1m`) |
+| `update.window` | `IPERF3_UPDATE_WINDOW` | – | empty = any time (e.g. `02:00-05:00`, local time) |
 | `log.level` | `IPERF3_LOG_LEVEL` | `LOG_LEVEL` | `info` (`debug`, `info`, `warn`, `error`) |
 | `log.format` | `IPERF3_LOG_FORMAT` | – | `text` (`text` or `json`) |
 
@@ -220,6 +224,7 @@ Content-Security-Policy (`img-src`).
 ```text
 i-tracker [-config config.yaml] [-version] [-no-tui]
 i-tracker service install|uninstall|start|stop|restart|status [-config path]
+i-tracker rollback
 ```
 
 `service install` registers a Windows service / systemd unit / launchd job
@@ -228,6 +233,28 @@ log goes to `i-tracker.log` next to the configuration. `-no-tui` is
 accepted for consistency with the other wedigo products but has no effect.
 `GET /health` (`status`, `scheduler_running`) and `GET /api/info` (`name`,
 `version`, `build_date`) need no sign-in.
+
+## Updates
+
+i-Tracker updates itself from a signed release feed at
+`https://www.wedigo.net/update/i-tracker/` (`latest.json`, Ed25519 signature
+in `latest.json.sig` checked against the wedigo release key built into the
+binary, SHA-256 per binary). There is one channel for all versions, so moving
+from 0.x to 1.x is an ordinary update.
+
+- `update.mode: auto` (default) installs a new release and restarts the
+  service, within `update.window` if set; `notify` only reports it (admins
+  install it under **Admin → Software update**); `off` never checks.
+- Automatic installs need a service (Windows service or systemd unit), a
+  writable program folder and a release build (`git describe` on a clean
+  tag). Development builds, foreground runs and containers
+  (`IPERF3_CONTAINER=1`, set by the Docker image) are never replaced
+  automatically.
+- The previous binary stays as `i-tracker.exe.bak` (`i-tracker.bak` on
+  Linux). A new version that fails to start, or crashes three times before
+  running healthy for two minutes, is rolled back automatically and not
+  installed again. `i-tracker rollback` restores the previous version by hand;
+  restart the service afterwards.
 
 ## Development
 
@@ -243,7 +270,9 @@ go run ./cmd/i-tracker
 | `internal/web` | HTTP API, live trace and live test progress (server-sent events), sessions/CSRF, embedded web interface (`static/`, libraries in `static/vendor/`) |
 | `internal/auth` | Argon2id passwords, session tokens, CSRF tokens |
 | `internal/config` | `config.yaml`, `IPERF3_*` environment variables |
-| `internal/svc` | operating-system service (kardianos/service) |
+| `cmd/i-tracker-feed` | builds the signed update feed of a release (vendor tool, not shipped) |
+| `internal/svc` | operating-system service (kardianos/service), recovery actions, detached restart |
+| `internal/selfupdate` | self-update: signed feed, install, automatic rollback |
 | `internal/iperf` | running iperf3, evaluating `--json-stream`, installation |
 | `internal/trace` | tracert/traceroute, GeoIP lookup and download, location interpolation |
 | `internal/scheduler` | per-server schedule, auto-trace |
@@ -266,6 +295,8 @@ i-Tracker is free software licensed under the GNU Affero General Public
 License v3.0, see [LICENSE](LICENSE). Anyone who modifies i-Tracker and
 offers it to others, including as a network service, must make the modified
 source code available under the same license.
+
+Third-party components and their license texts: [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md).
 
 ## Licences of embedded components
 

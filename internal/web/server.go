@@ -18,6 +18,7 @@ import (
 	"i-tracker/internal/iperf"
 	"i-tracker/internal/model"
 	"i-tracker/internal/scheduler"
+	"i-tracker/internal/selfupdate"
 	"i-tracker/internal/store"
 	"i-tracker/internal/trace"
 	"i-tracker/internal/version"
@@ -39,6 +40,8 @@ type Deps struct {
 	GeoIP func() trace.GeoInfo
 	// PublicRead opens read-only endpoints to guests (auth.public_read).
 	PublicRead bool
+	// Updates is the self-updater; nil reports it as off.
+	Updates *selfupdate.Manager
 }
 
 // MapSettings describes the UI map background.
@@ -58,6 +61,7 @@ type Server struct {
 	scheduler *scheduler.Scheduler
 	mapCfg    MapSettings
 	geoInfo   func() trace.GeoInfo
+	updates   *selfupdate.Manager
 	mux       *http.ServeMux
 	handler   http.Handler
 	// publicRead: guests may use read-only endpoints (see optionalUser).
@@ -97,6 +101,7 @@ func NewServer(d Deps) *Server {
 		scheduler:  d.Scheduler,
 		mapCfg:     d.Map,
 		geoInfo:    d.GeoIP,
+		updates:    d.Updates,
 		publicRead: d.PublicRead,
 		mux:        http.NewServeMux(),
 		testTraces: testTraces{running: map[int64]bool{}},
@@ -175,6 +180,10 @@ func (s *Server) routes() {
 	add("DELETE /api/admin/cleanup/traces", "admin", s.requireAdmin(s.handleCleanupTraces))
 	add("GET /api/admin/stats/database", "admin", s.requireAdmin(s.handleDatabaseStats))
 	add("POST /api/iperf3/install", "admin", s.requireAdmin(s.handleInstallIperf))
+
+	add("GET /api/update", "admin", s.requireAdmin(s.handleUpdateStatus))
+	add("POST /api/update/check", "admin", s.requireAdmin(s.handleUpdateCheck))
+	add("POST /api/update/install", "admin", s.requireAdmin(s.handleUpdateInstall))
 
 	// Public: static list without user data.
 	add("GET /api/public-servers", "public", http.HandlerFunc(s.handlePublicServers))

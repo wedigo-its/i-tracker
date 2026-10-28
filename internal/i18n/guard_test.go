@@ -56,6 +56,7 @@ var uiErrorFiles = []string{
 	"internal/iperf/install.go",
 	"internal/iperf/binary.go",
 	"internal/trace/tracer.go",
+	"internal/selfupdate/*.go",
 }
 
 // uiErrorExempt are files matched by uiErrorFiles whose errors never reach the UI.

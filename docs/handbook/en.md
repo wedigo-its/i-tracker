@@ -1,6 +1,6 @@
 title: i-Tracker documentation
 lead: How to install i-Tracker, measure your internet connection regularly and see which route your data takes. At the end you will find all settings to look up.
-version: Version 2.0
+version: Version 0.x
 
 ## overview | Overview
 
@@ -21,6 +21,7 @@ i-Tracker runs on one of your own computers and is used in the browser. It is fr
   - from the i-Tracker computer to the test server on its iperf3 port (usually 5201)
   - for route tracing: traceroute packets to the internet (sometimes blocked in company networks)
   - for the map: once a day a connection to db-ip.com to update the location data
+  - for [updates](#updates): HTTPS to www.wedigo.net every 6 hours
   - from your workstation to the interface on port 8000
 
 ## install | Installation
@@ -128,22 +129,45 @@ If nothing should be visible without logging in, set `auth.public_read` to `fals
 
 Under **Admin**, administrators create and delete further users.
 
-- **Administrators** may do everything, including managing users, deleting old measurements and installing iperf3.
+- **Administrators** may do everything, including managing users, deleting old measurements, installing iperf3 and installing updates.
 - **Regular users** may maintain servers and start measurements.
 
 The **Admin** area is also where you clean up: delete measurements and routes older than a certain number of days. i-Tracker never deletes anything by itself.
 
-## updates | Installing a new version
+## updates | Updates
 
-i-Tracker does not update itself. For a new version, stop the service, replace the program file and start the service again. Your data is kept; the database is adjusted automatically on start if needed.
+i-Tracker keeps itself up to date. It regularly checks www.wedigo.net for a new version, makes sure it really comes from us, and installs it. Your data is kept; the database is adjusted automatically on start if needed.
 
-```windows
-.\i-tracker.exe service stop
-.\i-tracker.exe service start
-```
+How this works is set in `update.mode`:
+
+- `auto` (default): new versions are installed, the service briefly restarts afterwards.
+- `notify`: i-Tracker only reports a new version. You install it yourself in the interface.
+- `off`: no checks for updates.
+
+With `update.window` you set a time of day when installing is allowed, for example `"02:00-05:00"`. Administrators see the state under **Admin → Software update**, where they can also check and install by hand.
+
+> Automatic installs only happen when i-Tracker runs as a service and may write to its program folder. When started by hand in a console window, it only reports new versions; after installing by hand, start it again.
+
+All versions come from the same source; moving to a new major version (for example from 0.x to 1.0) is an ordinary update.
+
+With Docker, i-Tracker does not update itself; rebuild the image instead:
 
 ```docker
 docker compose up -d --build
+```
+
+### Back to the previous version
+
+i-Tracker keeps the previous version. If a new version does not start properly, it goes back to the old one by itself. You can also do this by hand:
+
+```windows
+.\i-tracker.exe rollback
+.\i-tracker.exe service restart
+```
+
+```linux
+sudo ./i-tracker rollback
+sudo ./i-tracker service restart
 ```
 
 ## backup | Backup
@@ -191,6 +215,9 @@ The settings are in the file `config.yaml` in the program folder. Open it with a
 - geoip.maxmind_license_key :: License key at MaxMind.
 - map.tile_url :: Your own map service for a more detailed map, for example `https://tile.example.org/{z}/{x}/{y}.png`. Empty: the built-in world map.
 - map.tile_attribution :: Source notice for your own map service.
+- update.mode :: `auto`, `notify` or `off`, see [Updates](#updates).
+- update.interval :: How often to look for updates.
+- update.window :: Time of day when updates may be installed, for example `"02:00-05:00"`. Empty: any time.
 - log.level :: How detailed the log is: `debug`, `info`, `warn` or `error`.
 - log.format :: Layout of the log: `text` for reading, `json` for analysis tools.
 
@@ -209,6 +236,7 @@ Enter these commands in a console window in the program folder.
 - service stop :: Stop the service.
 - service restart :: Restart the service.
 - service status :: Show whether the service is running.
+- rollback :: Go back to the version before the last update. Restart the service afterwards.
 
 ### Interface for your own analyses
 
@@ -256,5 +284,8 @@ You can also fetch all data of the interface as JSON, for example for your own s
 - DELETE /api/admin/cleanup/traces :: Delete old route traces, `?days=…`.
 - GET /api/admin/stats/database :: Size and content of the database.
 - POST /api/iperf3/install :: Install iperf3.
+- GET /api/update :: State of the updates: mode, running and latest version, last check, and why nothing is installed automatically right now (`blocked`).
+- POST /api/update/check :: Look for updates now.
+- POST /api/update/install :: Install an available update.
 - GET /api/public-servers :: List of public test servers.
 - GET /api/public-servers/search :: Search the list of public test servers, `?query=…`.

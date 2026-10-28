@@ -8,9 +8,11 @@ COPY go.mod go.sum ./
 RUN go mod download
 COPY cmd ./cmd
 COPY internal ./internal
+# VERSION is the release tag (docker build --build-arg VERSION=v0.0.1).
 ARG BUILD_DATE=docker
+ARG VERSION=dev
 RUN CGO_ENABLED=0 go build -trimpath \
-      -ldflags "-s -w -X 'i-tracker/internal/version.BuildDate=${BUILD_DATE}'" \
+      -ldflags "-s -w -X 'i-tracker/internal/version.Version=${VERSION}' -X 'i-tracker/internal/version.BuildDate=${BUILD_DATE}'" \
       -o /out/i-tracker ./cmd/i-tracker
 
 # ---------- Runtime ----------
@@ -32,7 +34,10 @@ COPY --from=build /out/i-tracker /app/i-tracker
 # (DB-IP City Lite, or MaxMind GeoLite2 with IPERF3_GEOIP_MAXMIND_*) into /data.
 # Environment variables follow IPERF3_<SECTION>_<KEY>. The container listens
 # on all interfaces (the built-in fallback without config is 127.0.0.1:8000).
-ENV IPERF3_WEB_LISTEN=0.0.0.0:8000 \
+# IPERF3_CONTAINER=1 turns the self-update off: a container is updated by
+# pulling a new image.
+ENV IPERF3_CONTAINER=1 \
+    IPERF3_WEB_LISTEN=0.0.0.0:8000 \
     IPERF3_STORAGE_PATH=/data/i-tracker.db \
     IPERF3_GEOIP_PATH=/data/geoip/city.mmdb \
     TZ=Europe/Berlin

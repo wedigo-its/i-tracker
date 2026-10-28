@@ -7,7 +7,8 @@
 # IPERF3_<SECTION>_<KEY>, e.g. IPERF3_WEB_LISTEN, IPERF3_STORAGE_PATH,
 # IPERF3_AUTH_SECRET_KEY, IPERF3_AUTH_SESSION_TTL, IPERF3_AUTH_PUBLIC_READ,
 # IPERF3_SCHEDULER_ENABLED, IPERF3_IPERF_PATH, IPERF3_IPERF_AUTO_INSTALL, IPERF3_GEOIP_PATH,
-# IPERF3_MAP_TILE_URL, IPERF3_LOG_LEVEL, IPERF3_LOG_FORMAT.
+# IPERF3_MAP_TILE_URL, IPERF3_UPDATE_MODE, IPERF3_UPDATE_INTERVAL, IPERF3_UPDATE_WINDOW,
+# IPERF3_LOG_LEVEL, IPERF3_LOG_FORMAT.
 # Deprecated aliases (still accepted, logged as warning): LISTEN_ADDR, DB_PATH,
 # SECRET_KEY, SCHEDULER_ENABLED, IPERF3_PATH, IPERF3_AUTO_INSTALL, GEOIP_PATH,
 # LOG_LEVEL.
@@ -66,6 +67,16 @@ map:
   tile_url: ""
   # Attribution for the tiles (HTML allowed); empty = OpenStreetMap notice.
   tile_attribution: ""
+
+update:
+  # Automatic self-update from the signed wedigo release feed (HTTPS to www.wedigo.net).
+  # auto = install new releases and restart the service, notify = only report, off = disabled.
+  # Only a service updates itself automatically; containers (IPERF3_CONTAINER=1) never do.
+  mode: "auto"
+  # How often the feed is checked
+  interval: "6h"
+  # Optional daily window for automatic installs (local time), e.g. "02:00-05:00"; empty = any time
+  window: ""
 
 log:
   # debug | info | warn | error

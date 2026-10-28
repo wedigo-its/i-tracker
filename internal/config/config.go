@@ -16,6 +16,8 @@ import (
 	"time"
 
 	"gopkg.in/yaml.v3"
+
+	"i-tracker/internal/selfupdate"
 )
 
 // DefaultListen applies if web.listen is unset (local only); the generated
@@ -31,6 +33,7 @@ type Config struct {
 	Iperf     IperfConfig     `yaml:"iperf"`
 	GeoIP     GeoIPConfig     `yaml:"geoip"`
 	Map       MapConfig       `yaml:"map"`
+	Update    UpdateConfig    `yaml:"update"`
 	Log       LogConfig       `yaml:"log"`
 
 	// Dir is the config file's directory; relative paths resolve against it.
@@ -126,6 +129,26 @@ func (m MapConfig) TileOrigin() string {
 	return u.Scheme + "://" + host
 }
 
+// UpdateConfig controls the automatic self-update (see internal/selfupdate).
+type UpdateConfig struct {
+	// Mode is auto (install new releases and restart the service), notify
+	// (only report a newer release) or off.
+	Mode string `yaml:"mode"`
+	// Interval is how often the feed is checked (default 6h).
+	Interval string `yaml:"interval"`
+	// Window restricts automatic installs to a daily local time window such
+	// as "02:00-05:00"; empty allows any time.
+	Window string `yaml:"window"`
+}
+
+// IntervalDuration returns the check interval (empty = 6h).
+func (u UpdateConfig) IntervalDuration() (time.Duration, error) {
+	if u.Interval == "" {
+		return 6 * time.Hour, nil
+	}
+	return time.ParseDuration(u.Interval)
+}
+
 // LogConfig controls logging.
 type LogConfig struct {
 	// Level: debug, info, warn or error.
@@ -196,6 +219,13 @@ map:
   # Attribution shown for the tiles (HTML allowed); empty = OpenStreetMap notice.
   tile_attribution: ""
 
+update:
+  # auto = install new releases and restart the service, notify = only report, off
+  mode: "auto"
+  interval: "6h"
+  # Optional daily window for automatic installs, e.g. "02:00-05:00".
+  window: ""
+
 log:
   # debug | info | warn | error
   level: "info"
@@ -258,6 +288,7 @@ func defaults() *Config {
 		Auth:      AuthConfig{SessionTTL: "12h", PublicRead: true},
 		GeoIP:     GeoIPConfig{Path: "geoip/city.mmdb", AutoUpdate: true},
 		Scheduler: SchedulerConfig{Enabled: true},
+		Update:    UpdateConfig{Mode: string(selfupdate.ModeAuto), Interval: "6h"},
 		Log:       LogConfig{Level: "info", Format: "text"},
 	}
 }
@@ -287,6 +318,15 @@ func (c *Config) validate() error {
 			!strings.Contains(c.Map.TileURL, "{z}") || !strings.Contains(c.Map.TileURL, "{x}") || !strings.Contains(c.Map.TileURL, "{y}") {
 			return fmt.Errorf("map.tile_url must be an http(s) URL with {z}, {x} and {y}: %q", c.Map.TileURL)
 		}
+	}
+	if _, err := selfupdate.ParseMode(c.Update.Mode); err != nil {
+		return fmt.Errorf("update.mode: %w", err)
+	}
+	if d, err := c.Update.IntervalDuration(); err != nil || d < time.Minute {
+		return fmt.Errorf("update.interval must be a duration of at least 1m (e.g. 6h): %q", c.Update.Interval)
+	}
+	if _, err := selfupdate.ParseWindow(c.Update.Window); err != nil {
+		return fmt.Errorf("update.window: %w", err)
 	}
 	return nil
 }

@@ -38,6 +38,7 @@ func buildReference() reference {
 	for _, a := range serviceActions {
 		ref.CLI = append(ref.CLI, cliEntry{Name: "service " + a})
 	}
+	ref.CLI = append(ref.CLI, cliEntry{Name: "rollback"})
 	return ref
 }
 

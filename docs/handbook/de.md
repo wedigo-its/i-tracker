@@ -1,6 +1,6 @@
 title: i-Tracker-Dokumentation
 lead: So installieren Sie i-Tracker, messen Ihre Internetverbindung regelmäßig und sehen, über welchen Weg Ihre Daten laufen. Am Ende finden Sie alle Einstellungen zum Nachschlagen.
-version: Version 2.0
+version: Version 0.x
 
 ## overview | Überblick
 
@@ -21,6 +21,7 @@ i-Tracker läuft auf einem Ihrer eigenen Rechner und wird im Browser bedient. Es
   - vom i-Tracker-Rechner zum Messserver auf dessen iperf3-Port (meist 5201)
   - für die Wegverfolgung: Traceroute-Pakete ins Internet (in Firmennetzen manchmal gesperrt)
   - für die Karte: einmal am Tag eine Verbindung zu db-ip.com, um die Standortdaten zu aktualisieren
+  - für [Updates](#updates): alle 6 Stunden HTTPS zu www.wedigo.net
   - von Ihrem Arbeitsplatz zur Oberfläche auf Port 8000
 
 ## install | Installation
@@ -128,22 +129,45 @@ Soll ohne Anmeldung gar nichts zu sehen sein, setzen Sie `auth.public_read` auf 
 
 Unter **Admin** legen Administratoren weitere Benutzer an und löschen sie.
 
-- **Administratoren** dürfen alles, auch Benutzer verwalten, alte Messungen löschen und iperf3 installieren.
+- **Administratoren** dürfen alles, auch Benutzer verwalten, alte Messungen löschen, iperf3 installieren und Updates einspielen.
 - **Normale Benutzer** dürfen Server pflegen und Messungen starten.
 
 Im Bereich **Admin** räumen Sie auch auf: Messungen und Wegverfolgungen älter als eine bestimmte Zahl von Tagen löschen. Von selbst löscht i-Tracker nichts.
 
-## updates | Neue Version einspielen
+## updates | Updates
 
-i-Tracker aktualisiert sich nicht selbst. Für eine neue Version stoppen Sie den Dienst, ersetzen die Programmdatei und starten den Dienst wieder. Ihre Daten bleiben erhalten; die Datenbank wird beim Start bei Bedarf automatisch angepasst.
+i-Tracker hält sich selbst aktuell. Es schaut regelmäßig auf www.wedigo.net nach, ob es eine neue Version gibt, prüft, dass sie wirklich von uns stammt, und installiert sie. Ihre Daten bleiben erhalten; die Datenbank wird beim Start bei Bedarf automatisch angepasst.
 
-```windows
-.\i-tracker.exe service stop
-.\i-tracker.exe service start
-```
+Wie das abläuft, legen Sie in der Einstellung `update.mode` fest:
+
+- `auto` (Standard): Neue Versionen werden installiert, der Dienst startet danach kurz neu.
+- `notify`: i-Tracker meldet eine neue Version nur. Sie installieren sie selbst in der Oberfläche.
+- `off`: Keine Prüfung auf Updates.
+
+Mit `update.window` legen Sie eine Uhrzeit fest, zu der installiert werden darf, zum Beispiel `"02:00-05:00"`. Den Stand sehen Administratoren unter **Admin → Software-Update** und können dort auch von Hand prüfen und installieren.
+
+> Automatisch installiert wird nur, wenn i-Tracker als Dienst läuft und in seinen Programmordner schreiben darf. Starten Sie es von Hand im Konsolenfenster, meldet es neue Versionen nur; nach einer Installation von Hand starten Sie es neu.
+
+Alle Versionen kommen aus derselben Quelle, auch der Wechsel auf eine neue Hauptversion (etwa von 0.x auf 1.0) ist ein gewöhnliches Update.
+
+Mit Docker aktualisiert sich i-Tracker nicht selbst; dort bauen Sie das Image neu:
 
 ```docker
 docker compose up -d --build
+```
+
+### Zurück zur vorigen Version
+
+i-Tracker hebt die vorige Version auf. Startet eine neue Version nicht richtig, kehrt es von selbst zur alten zurück. Sie können das auch von Hand tun:
+
+```windows
+.\i-tracker.exe rollback
+.\i-tracker.exe service restart
+```
+
+```linux
+sudo ./i-tracker rollback
+sudo ./i-tracker service restart
 ```
 
 ## backup | Sicherung
@@ -191,6 +215,9 @@ Die Einstellungen stehen in der Datei `config.yaml` im Programmordner. Öffnen S
 - geoip.maxmind_license_key :: Lizenzschlüssel bei MaxMind.
 - map.tile_url :: Eigener Kartendienst für eine detailliertere Karte, zum Beispiel `https://tile.example.org/{z}/{x}/{y}.png`. Leer: die eingebaute Weltkarte.
 - map.tile_attribution :: Quellenhinweis für den eigenen Kartendienst.
+- update.mode :: `auto`, `notify` oder `off`, siehe [Updates](#updates).
+- update.interval :: Wie oft nach Updates geschaut wird.
+- update.window :: Uhrzeit, zu der Updates installiert werden dürfen, zum Beispiel `"02:00-05:00"`. Leer: jederzeit.
 - log.level :: Wie ausführlich das Protokoll ist: `debug`, `info`, `warn` oder `error`.
 - log.format :: Aufbau des Protokolls: `text` zum Lesen, `json` für Auswertungsprogramme.
 
@@ -209,6 +236,7 @@ Diese Befehle geben Sie im Konsolenfenster im Programmordner ein.
 - service stop :: Den Dienst stoppen.
 - service restart :: Den Dienst neu starten.
 - service status :: Anzeigen, ob der Dienst läuft.
+- rollback :: Zur Version vor dem letzten Update zurückkehren. Danach den Dienst neu starten.
 
 ### Schnittstelle für eigene Auswertungen
 
@@ -256,5 +284,8 @@ Alle Daten der Oberfläche können Sie auch als JSON abrufen, etwa für eigene S
 - DELETE /api/admin/cleanup/traces :: Alte Wegverfolgungen löschen, `?days=…`.
 - GET /api/admin/stats/database :: Größe und Inhalt der Datenbank.
 - POST /api/iperf3/install :: iperf3 installieren.
+- GET /api/update :: Stand der Updates: Modus, laufende und neueste Version, letzte Prüfung und warum gerade nicht automatisch installiert wird (`blocked`).
+- POST /api/update/check :: Jetzt nach Updates schauen.
+- POST /api/update/install :: Ein verfügbares Update installieren.
 - GET /api/public-servers :: Liste öffentlicher Messserver.
 - GET /api/public-servers/search :: In der Liste öffentlicher Messserver suchen, `?query=…`.
