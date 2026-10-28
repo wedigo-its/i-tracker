@@ -1,30 +1,30 @@
-/* wedigo-tokens.css — gemeinsame Gestaltungswerte aller wedigo-Produkte
-   Version: 2026.10.09 · Referenz: Spherifyer
-   Einbinden VOR dem produkteigenen CSS. Hex-Farben gehören nur in diese Datei.
-   Theme: <html data-theme="dark|light">; ohne Attribut gilt prefers-color-scheme.
-   Lizenz-Akzent: Produkte dürfen --accent-rgb per /theme.css überschreiben. */
+/* wedigo-tokens.css — shared design tokens of all wedigo products
+   Version: 2026.10.28 · Reference: Spherifyer
+   Load BEFORE the product CSS. Hex colours belong only in this file.
+   Theme: <html data-theme="dark|light">; without it prefers-color-scheme applies.
+   License accent: products may override --accent-rgb via /theme.css. */
 
 :root {
   /* Form */
-  --r-sm: 8px;      /* Buttons, Eingaben, Nav-Tabs */
-  --r-md: 12px;     /* Menüs, Dialog-Innenteile, Chips */
-  --r-lg: 16px;     /* Karten, Tabellenrahmen, Chart-Boxen, Dialoge */
-  --r-pill: 999px;  /* Pills, Fortschrittsbalken */
+  --r-sm: 8px;      /* buttons, inputs, nav tabs */
+  --r-md: 12px;     /* menus, dialog insets, chips */
+  --r-lg: 16px;     /* cards, table frames, chart boxes, dialogs */
+  --r-pill: 999px;  /* pills, progress bars */
   --font: ui-sans-serif, system-ui, "Segoe UI", Roboto, sans-serif, "Apple Color Emoji", "Segoe UI Emoji";
   --mono: ui-monospace, "Cascadia Code", Consolas, "SF Mono", monospace;
   --fs-base: 14px;
-  --fs-kpi: 1.6em;      /* KPI-Wert, 700, tabular-nums */
-  --fs-title: 1.1em;    /* Abschnittstitel, 700, 4px Akzentbalken links */
-  --fs-th: .74em;       /* Tabellenkopf, Versalien */
+  --fs-kpi: 1.6em;      /* KPI value, 700, tabular-nums */
+  --fs-title: 1.1em;    /* section title, 700, 4px accent bar on the left */
+  --fs-th: .74em;       /* table header, uppercase */
   --max: 1152px;
   --blur: 16px;
   --accent-rgb: 59 130 246;          /* #3b82f6 */
   --accent: rgb(var(--accent-rgb));
   --accent-light: #60a5fa;
-  --brand: #f2a93b;                  /* wedigo-Gold: nur Marke/Marketing, kein UI-Akzent */
+  --brand: #f2a93b;                  /* wedigo gold: brand/marketing only, not a UI accent */
 }
 
-/* Dunkel (Standard, wenn das System dunkel ist oder data-theme="dark") */
+/* Dark (default, when the system is dark or data-theme="dark") */
 :root, :root[data-theme="dark"] {
   color-scheme: dark;
   --bg: #060b18;
@@ -53,7 +53,7 @@
   --focus-ring: 0 0 0 3px rgb(var(--accent-rgb) / .22);
 }
 
-/* Hell */
+/* Light */
 :root[data-theme="light"] {
   color-scheme: light;
   --bg: #eef2f8;
@@ -93,8 +93,8 @@
   }
 }
 
-/* Gemeinsame Breakpoints (als Konvention, CSS-Variablen gehen in @media nicht):
-   900px  zweispaltige Raster -> einspaltig
-   760px  Navigation nur noch Icons, eigene Zeile
-   560px  KPI-Kacheln zweispaltig
-   480px  Kopfzeile kompakt */
+/* Shared breakpoints (a convention; CSS variables do not work in @media):
+   900px  two-column grids -> one column
+   760px  navigation icons only, own row
+   560px  KPI tiles in two columns
+   480px  compact header */
