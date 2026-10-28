@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"i-tracker/internal/auth"
+	"i-tracker/internal/i18n"
 	"i-tracker/internal/model"
 	"i-tracker/internal/store"
 )
@@ -77,7 +78,7 @@ func (s *Server) optionalUser(h userHandler) http.Handler {
 func (s *Server) requireAdmin(h userHandler) http.Handler {
 	return s.requireUser(func(w http.ResponseWriter, r *http.Request, u *model.User) {
 		if !u.IsAdmin {
-			writeError(w, r, http.StatusForbidden, "Keine ausreichende Berechtigung")
+			writeError(w, r, http.StatusForbidden, "err.auth.forbidden")
 			return
 		}
 		h(w, r, u)
@@ -85,10 +86,10 @@ func (s *Server) requireAdmin(h userHandler) http.Handler {
 }
 
 var (
-	errUnauthorized   = errors.New("Anmeldedaten konnten nicht geprüft werden")
-	errInactive       = errors.New("Benutzer ist deaktiviert")
-	errCSRF           = errors.New("CSRF-Prüfung fehlgeschlagen – bitte die Seite neu laden")
-	errMustChangePass = errors.New("Passwortwechsel erforderlich")
+	errUnauthorized   = i18n.E("err.auth.unauthorized")
+	errInactive       = i18n.E("err.auth.user_disabled")
+	errCSRF           = i18n.E("err.auth.csrf")
+	errMustChangePass = i18n.E("err.auth.password_change_required")
 )
 
 // session ist die geprüfte Sitzung einer Anfrage.
@@ -111,11 +112,11 @@ func (s *Server) authenticate(w http.ResponseWriter, r *http.Request, allowPendi
 	switch {
 	case errors.Is(err, errUnauthorized):
 		w.Header().Set("WWW-Authenticate", "Bearer")
-		writeError(w, r, http.StatusUnauthorized, err.Error())
+		writeErr(w, r, http.StatusUnauthorized, err)
 	case errors.Is(err, errInactive):
-		writeError(w, r, http.StatusBadRequest, err.Error())
+		writeErr(w, r, http.StatusBadRequest, err)
 	case errors.Is(err, errCSRF), errors.Is(err, errMustChangePass):
-		writeError(w, r, http.StatusForbidden, err.Error())
+		writeErr(w, r, http.StatusForbidden, err)
 	case err != nil:
 		writeInternal(w, r, err)
 	default:
@@ -261,7 +262,7 @@ func clearSessionCookies(w http.ResponseWriter, r *http.Request) {
 func crossOriginGuard(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if !safeMethod(r.Method) && crossOrigin(r) {
-			writeError(w, r, http.StatusForbidden, "Anfrage von fremder Herkunft abgelehnt")
+			writeError(w, r, http.StatusForbidden, "err.auth.cross_origin")
 			return
 		}
 		next.ServeHTTP(w, r)

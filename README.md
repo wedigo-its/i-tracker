@@ -30,7 +30,10 @@ the API and the web interface – no additional runtime or web server needed.
   header and with the globe on the login page; defaults to the browser
   language, otherwise German), light/dark theme (user menu or the switch on the
   login page; light unless chosen), mobile friendly. API messages follow the
-  request's `Accept-Language` header or `?lang=` (German without either)
+  request's `Accept-Language` header or `?lang=` (German without either);
+  error responses also name the message as a stable `code`
+  (`{"detail": "…", "code": "err.server.not_found"}`). Logs, console output
+  and command line help are English
 - **No external requests** – Chart.js, Leaflet and the world map are
   embedded in the binary; the page is served with a strict
   Content-Security-Policy (`default-src 'self'`, no inline scripts or styles)

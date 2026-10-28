@@ -19,7 +19,7 @@ func EnsureAdmin(ctx context.Context, st *store.Store) (created bool, err error)
 	if err != nil || !created {
 		return created, err
 	}
-	slog.Warn("Erster Admin angelegt – Passwort notieren, es wird nur dieses eine Mal angezeigt und muss bei der ersten Anmeldung geändert werden",
+	slog.Warn("First admin created: note the password, it is shown only this once and must be changed at the first sign-in",
 		"user", auth.DefaultAdminUsername, "initial_password", password)
 	if InitialPasswordHook != nil {
 		InitialPasswordHook(auth.DefaultAdminUsername, password)
@@ -34,7 +34,7 @@ var InitialPasswordHook func(username, password string)
 func createFirstAdmin(ctx context.Context, st *store.Store) (bool, string, error) {
 	n, err := st.CountUsers(ctx)
 	if err != nil {
-		return false, "", fmt.Errorf("Benutzer konnten nicht gezählt werden: %w", err)
+		return false, "", fmt.Errorf("users could not be counted: %w", err)
 	}
 	if n > 0 {
 		return false, "", nil
@@ -45,7 +45,7 @@ func createFirstAdmin(ctx context.Context, st *store.Store) (bool, string, error
 		return false, "", err
 	}
 	if err := st.CreateUser(ctx, admin); err != nil {
-		return false, "", fmt.Errorf("Admin konnte nicht angelegt werden: %w", err)
+		return false, "", fmt.Errorf("admin could not be created: %w", err)
 	}
 	return true, password, nil
 }
@@ -66,7 +66,7 @@ func FlagLegacyDefaultPassword(ctx context.Context, st *store.Store) error {
 	if err := st.SetMustChangePassword(ctx, u.ID, true); err != nil {
 		return err
 	}
-	slog.Warn("Admin nutzt noch das frühere Standardpasswort – Wechsel bei der nächsten Anmeldung erzwungen", "user", u.Username)
+	slog.Warn("Admin still uses the former default password, change forced at the next sign-in", "user", u.Username)
 	return nil
 }
 

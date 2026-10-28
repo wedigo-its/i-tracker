@@ -3,24 +3,25 @@ package iperf
 import (
 	"context"
 	"errors"
-	"fmt"
 	"log/slog"
 	"os"
 	"os/exec"
 	"runtime"
 	"strings"
 	"time"
+
+	"i-tracker/internal/i18n"
 )
 
 // installTimeout begrenzt eine Installation.
 const installTimeout = 10 * time.Minute
 
 var (
-	// ErrInstallRunning meldet, dass bereits eine Installation läuft.
-	ErrInstallRunning = errors.New("Installation läuft bereits")
-	// ErrNotInstallable meldet, dass iperf3 hier nicht installiert werden kann
-	// (bereits vorhanden, Pfad fest konfiguriert oder kein Paketmanager).
-	ErrNotInstallable = errors.New("iperf3 kann hier nicht automatisch installiert werden")
+	// ErrInstallRunning reports that an installation is already running.
+	ErrInstallRunning = i18n.E("err.install.running")
+	// ErrNotInstallable reports that iperf3 cannot be installed here (already
+	// present, path configured or no package manager).
+	ErrNotInstallable = i18n.E("err.install.not_installable")
 )
 
 // Status beschreibt die iperf3-Installation, die der Runner verwendet.
@@ -33,7 +34,18 @@ type Status struct {
 	// installiert werden kann; InstallCommand nennt die Befehle dafür.
 	Installable    bool   `json:"installable"`
 	InstallCommand string `json:"install_command,omitempty"`
-	Error          string `json:"error,omitempty"`
+	// Error is Err in English; the web UI renders Err in the request language.
+	Error string `json:"error,omitempty"`
+	Err   error  `json:"-"`
+}
+
+// setErr sets Err and its English text.
+func (st *Status) setErr(err error) {
+	st.Err = err
+	st.Error = ""
+	if err != nil {
+		st.Error = err.Error()
+	}
 }
 
 // Austauschbar für Tests: Ermittlung der Installationsbefehle und Installation.
@@ -66,7 +78,7 @@ func (r *Runner) refresh(binary string) error {
 	version, err := CheckVersion(binary)
 	st := Status{Path: binary, Version: version, Available: err == nil}
 	if err != nil {
-		st.Error = err.Error()
+		st.setErr(err)
 		if errors.Is(err, ErrNotInstalled) && configured == "" {
 			if cmds, planErr := installPlan(); planErr == nil {
 				st.Installable = true
@@ -76,7 +88,7 @@ func (r *Runner) refresh(binary string) error {
 				}
 				st.InstallCommand = strings.Join(parts, " && ")
 			} else {
-				st.Error += " – " + planErr.Error()
+				st.setErr(i18n.E("err.with_reason", err, planErr))
 			}
 		}
 	}
@@ -99,15 +111,15 @@ func (r *Runner) Prepare(configured string, autoInstall bool) {
 	binary := FindBinary(configured)
 	err := r.refresh(binary)
 	if err == nil {
-		slog.Info("iperf3 gefunden", "path", binary, "version", r.Status().Version)
+		slog.Info("iperf3 found", "path", binary, "version", r.Status().Version)
 		return
 	}
 	if autoInstall && r.Status().Installable {
-		slog.Info("iperf3 nicht gefunden – starte automatische Installation")
+		slog.Info("iperf3 not found, starting automatic installation")
 		r.InstallAsync()
 		return
 	}
-	slog.Warn("iperf3 nicht nutzbar – Tests werden fehlschlagen", "path", binary, "error", err,
+	slog.Warn("iperf3 not usable, tests will fail", "path", binary, "error", err,
 		"installable", r.Status().Installable)
 }
 
@@ -124,9 +136,9 @@ func (r *Runner) InstallAsync() error {
 		return ErrNotInstallable
 	}
 	r.status.Installing = true
-	r.status.Error = ""
+	r.status.setErr(nil)
 	r.cmdMu.Unlock()
-	slog.Info("Installiere iperf3", "command", r.Status().InstallCommand)
+	slog.Info("Installing iperf3", "command", r.Status().InstallCommand)
 
 	r.wg.Add(1)
 	go func() {
@@ -141,18 +153,17 @@ func (r *Runner) InstallAsync() error {
 		if err := r.refresh(binary); err != nil {
 			switch {
 			case installErr != nil:
-				err = fmt.Errorf("Installation fehlgeschlagen: %w", installErr)
+				err = i18n.Wrap(installErr, "err.install.failed")
 			case errors.Is(err, ErrNotInstalled):
-				err = errors.New("Installation laut Paketmanager erfolgreich, iperf3 wurde aber nicht gefunden – " +
-					"ggf. den Dienst neu starten (PATH) oder iperf.path setzen")
+				err = i18n.E("err.install.not_found_after")
 			}
 			r.cmdMu.Lock()
-			r.status.Error = err.Error()
+			r.status.setErr(err)
 			r.cmdMu.Unlock()
-			slog.Error("iperf3 konnte nicht installiert werden", "error", err)
+			slog.Error("iperf3 could not be installed", "error", err)
 			return
 		}
-		slog.Info("iperf3 installiert", "path", binary, "version", r.Status().Version)
+		slog.Info("iperf3 installed", "path", binary, "version", r.Status().Version)
 	}()
 	return nil
 }

@@ -2,7 +2,6 @@ package web
 
 import (
 	"errors"
-	"fmt"
 	"log/slog"
 	"net/http"
 	"strconv"
@@ -11,6 +10,7 @@ import (
 
 	"i-tracker/internal/auth"
 	"i-tracker/internal/db"
+	"i-tracker/internal/i18n"
 	"i-tracker/internal/model"
 	"i-tracker/internal/store"
 )
@@ -18,18 +18,14 @@ import (
 // checkPassword prüft ein Passwort gegen einen Hash (in Tests ersetzbar).
 var checkPassword = auth.CheckPassword
 
-// errTooManyAttempts ist die Antwort, solange eine Client-Adresse wegen zu
-// vieler Fehlversuche gesperrt ist.
-const errTooManyAttempts = "Zu viele Fehlversuche – bitte später erneut versuchen"
-
 // tooManyAttempts antwortet mit 429, wenn die Client-Adresse gesperrt ist.
 func (s *Server) tooManyAttempts(w http.ResponseWriter, r *http.Request, addr string) bool {
 	if !s.limiter.Blocked(addr) {
 		return false
 	}
-	slog.Warn("Anmeldung gesperrt – zu viele Fehlversuche", "path", r.URL.Path, "remote", addr)
+	slog.Warn("Sign-in blocked: too many failed attempts", "path", r.URL.Path, "remote", addr)
 	w.Header().Set("Retry-After", strconv.Itoa(int(auth.LoginWindow/time.Second)))
-	writeError(w, r, http.StatusTooManyRequests, errTooManyAttempts)
+	writeError(w, r, http.StatusTooManyRequests, "err.auth.too_many_attempts")
 	return true
 }
 
@@ -59,22 +55,22 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 	}
 	if !checkPassword(hash, req.Password) || u == nil {
 		s.limiter.Fail(addr)
-		slog.Warn("Anmeldung fehlgeschlagen", "user", req.Username, "remote", addr)
+		slog.Warn("Sign-in failed", "user", req.Username, "remote", addr)
 		w.Header().Set("WWW-Authenticate", "Bearer")
-		writeError(w, r, http.StatusUnauthorized, "Benutzername oder Passwort falsch")
+		writeError(w, r, http.StatusUnauthorized, "err.auth.wrong_credentials")
 		return
 	}
 	if !u.IsActive {
-		writeError(w, r, http.StatusBadRequest, "Benutzer ist deaktiviert")
+		writeErr(w, r, http.StatusBadRequest, errInactive)
 		return
 	}
 	// Ältere bcrypt-Hashes bei erfolgreicher Anmeldung transparent auf Argon2id umstellen.
 	if auth.NeedsRehash(u.HashedPassword) {
 		if hash, err := auth.HashPassword(req.Password); err == nil {
 			if err := s.store.SetPassword(r.Context(), u.ID, hash); err != nil {
-				slog.Warn("Passwort-Hash konnte nicht aktualisiert werden", "user", u.Username, "error", err)
+				slog.Warn("Password hash could not be updated", "user", u.Username, "error", err)
 			} else {
-				slog.Info("Passwort-Hash auf Argon2id umgestellt", "user", u.Username)
+				slog.Info("Password hash upgraded to Argon2id", "user", u.Username)
 			}
 		}
 	}
@@ -131,7 +127,7 @@ func (s *Server) handleLogoutAll(w http.ResponseWriter, r *http.Request, u *mode
 		writeInternal(w, r, err)
 		return
 	}
-	slog.Info("Alle Sitzungen beendet", "user", u.Username, "remote", clientAddr(r))
+	slog.Info("All sessions ended", "user", u.Username, "remote", clientAddr(r))
 	clearSessionCookies(w, r)
 	w.WriteHeader(http.StatusNoContent)
 }
@@ -180,21 +176,21 @@ func (s *Server) handleRegister(w http.ResponseWriter, r *http.Request, _ *model
 	if !decodeJSON(w, r, &req) {
 		return
 	}
-	if msg := validateNewUser(req.Username, req.Email, req.Password); msg != "" {
-		writeError(w, r, http.StatusUnprocessableEntity, msg)
+	if err := validateNewUser(req.Username, req.Email, req.Password); err != nil {
+		writeErr(w, r, http.StatusUnprocessableEntity, err)
 		return
 	}
 
 	ctx := r.Context()
 	if _, err := s.store.UserByUsername(ctx, req.Username); err == nil {
-		writeError(w, r, http.StatusBadRequest, "Benutzername ist bereits vergeben")
+		writeError(w, r, http.StatusBadRequest, "err.auth.username_taken")
 		return
 	} else if !errors.Is(err, store.ErrNotFound) {
 		writeInternal(w, r, err)
 		return
 	}
 	if _, err := s.store.UserByEmail(ctx, req.Email); err == nil {
-		writeError(w, r, http.StatusBadRequest, "E-Mail-Adresse ist bereits registriert")
+		writeError(w, r, http.StatusBadRequest, "err.auth.email_taken")
 		return
 	} else if !errors.Is(err, store.ErrNotFound) {
 		writeInternal(w, r, err)
@@ -220,27 +216,27 @@ func (s *Server) handleRegister(w http.ResponseWriter, r *http.Request, _ *model
 	writeJSON(w, r, http.StatusOK, u)
 }
 
-// validateNewUser prüft die Feldlängen.
-func validateNewUser(username, email, password string) string {
+// validateNewUser checks the field lengths.
+func validateNewUser(username, email, password string) error {
 	switch {
 	case utf8.RuneCountInString(username) < 3 || utf8.RuneCountInString(username) > 50:
-		return "Benutzername muss 3–50 Zeichen lang sein"
+		return i18n.E("err.auth.username_length")
 	case utf8.RuneCountInString(email) < 3 || utf8.RuneCountInString(email) > 100:
-		return "E-Mail-Adresse muss 3–100 Zeichen lang sein"
+		return i18n.E("err.auth.email_length")
 	}
 	return validatePassword(password)
 }
 
-// validatePassword prüft die Länge eines neuen Passworts. Bestehende kürzere
-// Passwörter bleiben für die Anmeldung gültig.
-func validatePassword(password string) string {
+// validatePassword checks the length of a new password. Existing shorter
+// passwords stay valid for signing in.
+func validatePassword(password string) error {
 	switch {
 	case utf8.RuneCountInString(password) < auth.MinPasswordLength:
-		return fmt.Sprintf("Passwort muss mindestens %d Zeichen lang sein", auth.MinPasswordLength)
+		return i18n.E("err.auth.password_short", auth.MinPasswordLength)
 	case len(password) > auth.MaxPasswordBytes:
-		return "Passwort darf höchstens 256 Byte lang sein"
+		return i18n.E("err.auth.password_long", auth.MaxPasswordBytes)
 	}
-	return ""
+	return nil
 }
 
 func (s *Server) handleDeleteUser(w http.ResponseWriter, r *http.Request, current *model.User) {
@@ -249,17 +245,17 @@ func (s *Server) handleDeleteUser(w http.ResponseWriter, r *http.Request, curren
 		return
 	}
 	if id == current.ID {
-		writeError(w, r, http.StatusBadRequest, "Das eigene Konto kann nicht gelöscht werden")
+		writeError(w, r, http.StatusBadRequest, "err.auth.delete_self")
 		return
 	}
 	if err := s.store.DeleteUser(r.Context(), id); errors.Is(err, store.ErrNotFound) {
-		writeError(w, r, http.StatusNotFound, "Benutzer nicht gefunden")
+		writeError(w, r, http.StatusNotFound, "err.auth.user_not_found")
 		return
 	} else if err != nil {
 		writeInternal(w, r, err)
 		return
 	}
-	writeJSON(w, r, http.StatusOK, map[string]string{"message": "Benutzer gelöscht"})
+	writeJSON(w, r, http.StatusOK, map[string]string{"message": message(r, "msg.auth.user_deleted")})
 }
 
 // handleChangePassword ändert das Passwort des angemeldeten Benutzers. Das
@@ -282,16 +278,16 @@ func (s *Server) handleChangePassword(w http.ResponseWriter, r *http.Request, u 
 	}
 	if !checkPassword(u.HashedPassword, req.CurrentPassword) {
 		s.limiter.Fail(addr)
-		slog.Warn("Passwortwechsel: aktuelles Passwort falsch", "user", u.Username, "remote", addr)
-		writeError(w, r, http.StatusBadRequest, "Aktuelles Passwort ist falsch")
+		slog.Warn("Password change: current password wrong", "user", u.Username, "remote", addr)
+		writeError(w, r, http.StatusBadRequest, "err.auth.current_password_wrong")
 		return
 	}
-	if msg := validatePassword(req.NewPassword); msg != "" {
-		writeError(w, r, http.StatusUnprocessableEntity, msg)
+	if err := validatePassword(req.NewPassword); err != nil {
+		writeErr(w, r, http.StatusUnprocessableEntity, err)
 		return
 	}
 	if req.NewPassword == req.CurrentPassword {
-		writeError(w, r, http.StatusUnprocessableEntity, "Das neue Passwort muss sich vom bisherigen unterscheiden")
+		writeError(w, r, http.StatusUnprocessableEntity, "err.auth.password_same")
 		return
 	}
 	// Die Sitzung wurde in requireUserPending bereits geprüft.
@@ -315,9 +311,9 @@ func (s *Server) handleChangePassword(w http.ResponseWriter, r *http.Request, u 
 	if fromCookie {
 		setSessionCookie(w, r, token, s.tokens.TTL())
 	}
-	slog.Info("Passwort geändert, andere Sitzungen beendet", "user", u.Username, "remote", addr)
+	slog.Info("Password changed, other sessions ended", "user", u.Username, "remote", addr)
 	writeJSON(w, r, http.StatusOK, map[string]string{
-		"message":      "Passwort geändert",
+		"message":      message(r, "msg.auth.password_changed"),
 		"access_token": token,
 		"token_type":   "bearer",
 		"csrf_token":   s.tokens.CSRF(claims.SessionID),

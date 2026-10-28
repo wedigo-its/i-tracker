@@ -18,7 +18,7 @@ const (
 // Datenbank nicht kennt. Bevorzugt wird ein Hop im selben /24-Netz innerhalb
 // von ±5 Hops, sonst der nächstgelegene Hop mit Koordinaten (jeweils erst
 // rückwärts, dann vorwärts). Übernommene Daten werden mit GeoIPInterpolated
-// markiert, die Stadt mit vorangestelltem "? ".
+// markiert, die Stadt mit vorangestelltem "? " (no city when the donor has none).
 func Interpolate(hops []model.TraceHop, rnd *rand.Rand) {
 	for i := range hops {
 		h := &hops[i]
@@ -31,11 +31,14 @@ func Interpolate(hops []model.TraceHop, rnd *rand.Rand) {
 		}
 		lat := *donor.Latitude + (rnd.Float64()*2-1)*jitterDegrees
 		lon := *donor.Longitude + (rnd.Float64()*2-1)*jitterDegrees
-		city := "? Unbekannt"
+		// Without a known city the hop has none; the UI names it unknown in
+		// the viewer's language.
+		var city *string
 		if donor.City != nil && *donor.City != "" {
-			city = "? " + *donor.City
+			c := "? " + *donor.City
+			city = &c
 		}
-		h.Latitude, h.Longitude, h.City = &lat, &lon, &city
+		h.Latitude, h.Longitude, h.City = &lat, &lon, city
 		h.Country, h.CountryCode = donor.Country, donor.CountryCode
 		h.GeoIPInterpolated = true
 	}

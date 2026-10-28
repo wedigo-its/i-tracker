@@ -11,7 +11,7 @@ import (
 )
 
 const traceColumns = `id, test_id, source_ip, destination_ip, destination_host, total_hops, total_rtt_ms,
-	completed, error_message, started_at, completed_at, created_at`
+	completed, error_message, COALESCE(error_text, ''), started_at, completed_at, created_at`
 
 const hopColumns = `id, trace_id, hop_number, ip_address, hostname, latitude, longitude, city, country,
 	country_code, asn, asn_organization, geoip_interpolated, rtt_ms, packet_loss, responded`
@@ -19,7 +19,7 @@ const hopColumns = `id, trace_id, hop_number, ip_address, hostname, latitude, lo
 func scanTrace(row rowScanner) (*model.Trace, error) {
 	var t model.Trace
 	err := row.Scan(&t.ID, &t.TestID, &t.SourceIP, &t.DestinationIP, &t.DestinationHost, &t.TotalHops, &t.TotalRTTMs,
-		&t.Completed, &t.ErrorMessage, db.NullTime(&t.StartedAt), db.NullTime(&t.CompletedAt), db.Time(&t.CreatedAt))
+		&t.Completed, &t.ErrorMessage, &t.ErrorText, db.NullTime(&t.StartedAt), db.NullTime(&t.CompletedAt), db.Time(&t.CreatedAt))
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, ErrNotFound
 	}
@@ -121,10 +121,10 @@ func (s *Store) CreateTrace(ctx context.Context, t *model.Trace) error {
 
 	res, err := tx.ExecContext(noCancel(ctx),
 		`INSERT INTO traces (test_id, source_ip, destination_ip, destination_host, total_hops, total_rtt_ms,
-			completed, error_message, started_at, completed_at, created_at)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			completed, error_message, error_text, started_at, completed_at, created_at)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		t.TestID, t.SourceIP, t.DestinationIP, t.DestinationHost, t.TotalHops, t.TotalRTTMs,
-		t.Completed, t.ErrorMessage, db.FormatNullTime(t.StartedAt), db.FormatNullTime(t.CompletedAt), db.FormatTime(t.CreatedAt))
+		t.Completed, t.ErrorMessage, nullIfEmpty(t.ErrorText), db.FormatNullTime(t.StartedAt), db.FormatNullTime(t.CompletedAt), db.FormatTime(t.CreatedAt))
 	if err != nil {
 		return err
 	}
@@ -148,6 +148,14 @@ func (s *Store) CreateTrace(ctx context.Context, t *model.Trace) error {
 		}
 	}
 	return tx.Commit()
+}
+
+// nullIfEmpty stores "" as NULL.
+func nullIfEmpty(s string) *string {
+	if s == "" {
+		return nil
+	}
+	return &s
 }
 
 // DeleteTrace löscht einen Trace; die Hops folgen per ON DELETE CASCADE.

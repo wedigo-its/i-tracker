@@ -17,6 +17,10 @@ const STRINGS = {
   'lang.choose':          ['Sprache wählen', 'Choose language'],
   'lang.label':           ['Sprache', 'Language'],
 
+  // Quellenhinweise der Karte
+  'map.dataBy':           ['Kartendaten: {src}', 'Map data: {src}'],
+  'map.osmContributors':  ['{osm}-Mitwirkende', '{osm} contributors'],
+
   // Anmeldung und Benutzermenü
   'login.user':           ['Benutzername', 'Username'],
   'login.pass':           ['Passwort', 'Password'],

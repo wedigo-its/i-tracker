@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"i-tracker/internal/db"
+	"i-tracker/internal/i18n"
 	"i-tracker/internal/model"
 )
 
@@ -15,7 +16,7 @@ const testColumns = `id, server_id, protocol, direction, duration, parallel_stre
 	started_at, completed_at,
 	download_bandwidth_mbps, download_bytes, download_jitter_ms, download_packet_loss_percent,
 	upload_bandwidth_mbps, upload_bytes, upload_jitter_ms, upload_packet_loss_percent,
-	retransmits, cpu_percent, error_message, created_at`
+	retransmits, cpu_percent, error_message, COALESCE(error_text, ''), created_at`
 
 func scanTest(row rowScanner, extra ...any) (*model.Test, error) {
 	var t model.Test
@@ -24,7 +25,7 @@ func scanTest(row rowScanner, extra ...any) (*model.Test, error) {
 		db.NullTime(&t.StartedAt), db.NullTime(&t.CompletedAt),
 		&r.DownloadBandwidthMbps, &r.DownloadBytes, &r.DownloadJitterMs, &r.DownloadPacketLossPercent,
 		&r.UploadBandwidthMbps, &r.UploadBytes, &r.UploadJitterMs, &r.UploadPacketLossPercent,
-		&r.Retransmits, &r.CPUPercent, &t.ErrorMessage, db.Time(&t.CreatedAt)}, extra...)
+		&r.Retransmits, &r.CPUPercent, &t.ErrorMessage, &t.ErrorText, db.Time(&t.CreatedAt)}, extra...)
 	err := row.Scan(dest...)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, ErrNotFound
@@ -135,28 +136,44 @@ func (s *Store) StartTest(ctx context.Context, id int64, startedAt time.Time) er
 		model.StatusRunning, db.FormatTime(startedAt), id))
 }
 
-// FinishTest speichert Endstatus, Messwerte, Fehlermeldung und Rohausgabe.
+// failureColumns returns the stored form of a failure: the English text for
+// error_message and the language-neutral message for error_text. Both are
+// NULL without a failure; error_text is NULL too for text without a catalog
+// key (another program's output), as in traces (CreateTrace) and in rows
+// of versions before the column existed.
+func failureColumns(failure error) (msg, text *string) {
+	if failure == nil {
+		return nil, nil
+	}
+	m := failure.Error()
+	return &m, nullIfEmpty(i18n.MsgOf(failure).Encode())
+}
+
+// FinishTest stores the final status, the results, the reason of a failure
+// (nil = none) and the raw output.
 func (s *Store) FinishTest(ctx context.Context, id int64, status model.TestStatus, completedAt time.Time,
-	r model.TestResult, errMsg, rawOutput *string) error {
+	r model.TestResult, failure error, rawOutput *string) error {
+	errMsg, errText := failureColumns(failure)
 	return affectedOne(s.db.ExecContext(noCancel(ctx),
 		`UPDATE tests SET status = ?, completed_at = ?,
 			download_bandwidth_mbps = ?, download_bytes = ?, download_jitter_ms = ?, download_packet_loss_percent = ?,
 			upload_bandwidth_mbps = ?, upload_bytes = ?, upload_jitter_ms = ?, upload_packet_loss_percent = ?,
-			retransmits = ?, cpu_percent = ?, error_message = ?, raw_output = ?
+			retransmits = ?, cpu_percent = ?, error_message = ?, error_text = ?, raw_output = ?
 		 WHERE id = ?`,
 		status, db.FormatTime(completedAt),
 		r.DownloadBandwidthMbps, r.DownloadBytes, r.DownloadJitterMs, r.DownloadPacketLossPercent,
 		r.UploadBandwidthMbps, r.UploadBytes, r.UploadJitterMs, r.UploadPacketLossPercent,
-		r.Retransmits, r.CPUPercent, errMsg, rawOutput, id))
+		r.Retransmits, r.CPUPercent, errMsg, errText, rawOutput, id))
 }
 
-// FailUnfinishedTests markiert alle wartenden oder laufenden Tests als
-// fehlgeschlagen. Wird beim Start aufgerufen, da solche Tests aus einem
-// vorherigen, abgebrochenen Lauf stammen.
-func (s *Store) FailUnfinishedTests(ctx context.Context, msg string) (int64, error) {
+// FailUnfinishedTests marks every pending or running test as failed with
+// reason. Called on start: such tests are left over from a run that was
+// interrupted.
+func (s *Store) FailUnfinishedTests(ctx context.Context, reason error) (int64, error) {
+	errMsg, errText := failureColumns(reason)
 	res, err := s.db.ExecContext(noCancel(ctx),
-		`UPDATE tests SET status = ?, completed_at = ?, error_message = ? WHERE status IN (?, ?)`,
-		model.StatusFailed, db.FormatTime(db.Now()), msg, model.StatusPending, model.StatusRunning)
+		`UPDATE tests SET status = ?, completed_at = ?, error_message = ?, error_text = ? WHERE status IN (?, ?)`,
+		model.StatusFailed, db.FormatTime(db.Now()), errMsg, errText, model.StatusPending, model.StatusRunning)
 	if err != nil {
 		return 0, err
 	}

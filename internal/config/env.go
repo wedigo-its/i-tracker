@@ -106,13 +106,13 @@ func (c *Config) applyEnv(lookup func(string) (string, bool)) error {
 		}
 		newName := EnvName(l.key)
 		if nv, set := lookup(newName); set && nv != "" {
-			c.Warnings = append(c.Warnings, fmt.Sprintf("Veraltete Umgebungsvariable %s wird ignoriert, da %s gesetzt ist", l.name, newName))
+			c.Warnings = append(c.Warnings, fmt.Sprintf("Deprecated environment variable %s is ignored because %s is set", l.name, newName))
 			continue
 		}
 		if err := setField(fields[l.key].val, v); err != nil {
-			return fmt.Errorf("%s ist ungültig: %q", l.name, v)
+			return fmt.Errorf("%s is invalid: %q", l.name, v)
 		}
-		c.Warnings = append(c.Warnings, fmt.Sprintf("Veraltete Umgebungsvariable %s – bitte %s verwenden", l.name, newName))
+		c.Warnings = append(c.Warnings, fmt.Sprintf("Deprecated environment variable %s, please use %s", l.name, newName))
 	}
 	for _, f := range c.envFields() {
 		name := EnvName(f.key)
@@ -121,7 +121,7 @@ func (c *Config) applyEnv(lookup func(string) (string, bool)) error {
 			continue
 		}
 		if err := setField(f.val, v); err != nil {
-			return fmt.Errorf("%s ist ungültig: %q", name, v)
+			return fmt.Errorf("%s is invalid: %q", name, v)
 		}
 	}
 	return nil
@@ -144,7 +144,7 @@ func setField(v reflect.Value, s string) error {
 		}
 		v.SetInt(n)
 	default:
-		return fmt.Errorf("Typ %s nicht unterstützt", v.Kind())
+		return fmt.Errorf("type %s not supported", v.Kind())
 	}
 	return nil
 }

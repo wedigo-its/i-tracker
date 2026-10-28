@@ -76,7 +76,7 @@ func (u *GeoUpdater) Updating() bool { return u != nil && u.updating.Load() }
 func (u *GeoUpdater) Run(ctx context.Context, interval time.Duration) {
 	for {
 		if err := u.Check(ctx); err != nil && ctx.Err() == nil {
-			slog.Warn("GeoIP-Datenbank konnte nicht aktualisiert werden", "source", u.Source(), "error", err)
+			slog.Warn("GeoIP database could not be updated", "source", u.Source(), "error", err)
 		}
 		select {
 		case <-ctx.Done():
@@ -109,7 +109,7 @@ func (u *GeoUpdater) Check(ctx context.Context) error {
 
 	u.updating.Store(true)
 	defer u.updating.Store(false)
-	slog.Info("GeoIP-Datenbank wird heruntergeladen", "source", want)
+	slog.Info("Downloading GeoIP database", "source", want)
 	if err := u.download(ctx, want, url); err != nil {
 		return err
 	}
@@ -118,7 +118,7 @@ func (u *GeoUpdater) Check(ctx context.Context) error {
 	}
 	// Die Änderungszeit merkt sich den Stand der Quelle für den nächsten Abgleich.
 	os.Chtimes(u.Path, lastMod, lastMod)
-	slog.Info("GeoIP-Datenbank aktualisiert", "source", want, "path", u.Path)
+	slog.Info("GeoIP database updated", "source", want, "path", u.Path)
 	return nil
 }
 
@@ -163,7 +163,7 @@ func (u *GeoUpdater) latest(ctx context.Context, source string) (string, time.Ti
 		}
 		res.Body.Close()
 		if res.StatusCode == http.StatusUnauthorized {
-			return "", time.Time{}, errors.New("MaxMind lehnt Account-ID oder License-Key ab")
+			return "", time.Time{}, errors.New("MaxMind rejects the account ID or license key")
 		}
 		lastMod, _ := http.ParseTime(res.Header.Get("Last-Modified"))
 		return u.MaxMindURL, lastMod, nil
@@ -186,7 +186,7 @@ func (u *GeoUpdater) latest(ctx context.Context, source string) (string, time.Ti
 			return url, lastMod, nil
 		}
 	}
-	return "", time.Time{}, errors.New("keine DB-IP-Ausgabe für diesen oder den Vormonat gefunden")
+	return "", time.Time{}, errors.New("no DB-IP release found for this or the previous month")
 }
 
 // newer meldet, ob die Quelle neuer ist als die abgelegte Datei.
@@ -222,7 +222,7 @@ func (u *GeoUpdater) download(ctx context.Context, source, url string) error {
 	defer res.Body.Close()
 	if res.StatusCode != http.StatusOK {
 		tmp.Close()
-		return fmt.Errorf("Download fehlgeschlagen: HTTP %d", res.StatusCode)
+		return fmt.Errorf("download failed: HTTP %d", res.StatusCode)
 	}
 
 	sum := sha256.New()
@@ -248,7 +248,7 @@ func (u *GeoUpdater) download(ctx context.Context, source, url string) error {
 		}
 	}
 	if err := u.validate(tmpName); err != nil {
-		return fmt.Errorf("heruntergeladene Datenbank ist ungültig: %w", err)
+		return fmt.Errorf("downloaded database is invalid: %w", err)
 	}
 	return u.install(tmpName, u.Path)
 }
@@ -261,7 +261,7 @@ func (u *GeoUpdater) verifyMaxMind(ctx context.Context, sum hash.Hash) error {
 	}
 	defer res.Body.Close()
 	if res.StatusCode != http.StatusOK {
-		return fmt.Errorf("Prüfsumme nicht abrufbar: HTTP %d", res.StatusCode)
+		return fmt.Errorf("checksum not available: HTTP %d", res.StatusCode)
 	}
 	line, err := io.ReadAll(io.LimitReader(res.Body, 1024))
 	if err != nil {
@@ -269,7 +269,7 @@ func (u *GeoUpdater) verifyMaxMind(ctx context.Context, sum hash.Hash) error {
 	}
 	want, _, _ := strings.Cut(strings.TrimSpace(string(line)), " ")
 	if !strings.EqualFold(want, hex.EncodeToString(sum.Sum(nil))) {
-		return errors.New("Prüfsumme der MaxMind-Datenbank stimmt nicht")
+		return errors.New("checksum of the MaxMind database does not match")
 	}
 	return nil
 }
@@ -313,7 +313,7 @@ func extractTarMMDB(r io.Reader, w io.Writer) error {
 	for {
 		h, err := tr.Next()
 		if err == io.EOF {
-			return errors.New("Archiv enthält keine .mmdb-Datei")
+			return errors.New("archive contains no .mmdb file")
 		}
 		if err != nil {
 			return err
@@ -330,7 +330,7 @@ func copyLimited(w io.Writer, r io.Reader) error {
 		return err
 	}
 	if n > maxDatabaseSize {
-		return errors.New("Datenbank ist größer als erlaubt")
+		return errors.New("database is larger than allowed")
 	}
 	return nil
 }

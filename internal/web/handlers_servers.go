@@ -8,18 +8,20 @@ import (
 	"i-tracker/internal/store"
 )
 
-const msgServerNotFound = "Server nicht gefunden"
-const msgServerDuplicate = "Ein Server mit diesem Namen existiert bereits"
+const (
+	msgServerNotFound  = "err.server.not_found"
+	msgServerDuplicate = "err.server.duplicate"
+)
 
 func (s *Server) handleListServers(w http.ResponseWriter, r *http.Request, _ *model.User) {
 	enabled, err := queryBool(r, "enabled")
 	if err != nil {
-		writeError(w, r, http.StatusUnprocessableEntity, err.Error())
+		writeErr(w, r, http.StatusUnprocessableEntity, err)
 		return
 	}
 	skip, limit, err := paging(r, 100, 1000)
 	if err != nil {
-		writeError(w, r, http.StatusUnprocessableEntity, err.Error())
+		writeErr(w, r, http.StatusUnprocessableEntity, err)
 		return
 	}
 	servers, err := s.store.ListServers(r.Context(), enabled, skip, limit)
@@ -43,8 +45,8 @@ func (s *Server) handleCreateServer(w http.ResponseWriter, r *http.Request, _ *m
 	if !decodeJSON(w, r, &sv.ServerSettings) {
 		return
 	}
-	if msg := sv.Validate(); msg != "" {
-		writeError(w, r, http.StatusUnprocessableEntity, msg)
+	if err := sv.Validate(); err != nil {
+		writeErr(w, r, http.StatusUnprocessableEntity, err)
 		return
 	}
 	if err := s.store.CreateServer(r.Context(), sv); errors.Is(err, store.ErrDuplicate) {
@@ -67,8 +69,8 @@ func (s *Server) handleUpdateServer(w http.ResponseWriter, r *http.Request, _ *m
 	if !decodeJSON(w, r, &sv.ServerSettings) {
 		return
 	}
-	if msg := sv.Validate(); msg != "" {
-		writeError(w, r, http.StatusUnprocessableEntity, msg)
+	if err := sv.Validate(); err != nil {
+		writeErr(w, r, http.StatusUnprocessableEntity, err)
 		return
 	}
 	if err := s.store.UpdateServer(r.Context(), sv); errors.Is(err, store.ErrDuplicate) {

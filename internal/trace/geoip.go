@@ -173,7 +173,7 @@ func (g *GeoIP) Lookup(ip string) *Location {
 }
 
 // errNotCity meldet eine Datenbank, die keine Standorte auf Stadtebene enthält.
-var errNotCity = errors.New("keine City-Datenbank")
+var errNotCity = errors.New("not a city database")
 
 // openCity öffnet eine MMDB-Datei und prüft, dass sie Stadt-Standorte liefert.
 func openCity(path string) (*geoip2.Reader, error) {

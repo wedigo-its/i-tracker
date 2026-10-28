@@ -58,7 +58,7 @@ func (s *Scheduler) Start(ctx context.Context) error {
 			n++
 		}
 	}
-	slog.Info("Scheduler gestartet", "scheduled_servers", n)
+	slog.Info("Scheduler started", "scheduled_servers", n)
 	return nil
 }
 
@@ -112,7 +112,7 @@ func (s *Scheduler) Update(sv *model.Server) bool {
 		defer s.wg.Done()
 		s.loop(ctx, id, interval)
 	}()
-	slog.Info("Zeitplan aktiv", "server", sv.Name, "interval", interval)
+	slog.Info("Schedule active", "server", sv.Name, "interval", interval)
 	return true
 }
 
@@ -127,7 +127,7 @@ func (s *Scheduler) removeLocked(serverID int64) {
 	if j, ok := s.jobs[serverID]; ok {
 		j.cancel()
 		delete(s.jobs, serverID)
-		slog.Info("Zeitplan entfernt", "server", serverID)
+		slog.Info("Schedule removed", "server", serverID)
 	}
 }
 
@@ -155,10 +155,10 @@ func (s *Scheduler) runOnce(ctx context.Context, serverID int64) {
 	}
 	test := model.NewTestFromDefaults(sv)
 	if err := s.store.CreateTest(ctx, test); err != nil {
-		slog.Error("Geplanter Test konnte nicht angelegt werden", "server", sv.Name, "error", err)
+		slog.Error("Scheduled test could not be created", "server", sv.Name, "error", err)
 		return
 	}
-	slog.Info("Geplanter Test", "server", sv.Name, "test", test.ID)
+	slog.Info("Scheduled test", "server", sv.Name, "test", test.ID)
 	select {
 	case <-s.runner.Submit(test):
 	case <-ctx.Done():
@@ -174,8 +174,8 @@ func (s *Scheduler) runOnce(ctx context.Context, serverID int64) {
 	}
 	tr.TestID = &test.ID
 	if err := s.store.CreateTrace(ctx, tr); err != nil {
-		slog.Error("Auto-Trace konnte nicht gespeichert werden", "server", sv.Name, "error", err)
+		slog.Error("Auto trace could not be saved", "server", sv.Name, "error", err)
 		return
 	}
-	slog.Info("Auto-Trace abgeschlossen", "server", sv.Name, "test", test.ID, "hops", tr.TotalHops)
+	slog.Info("Auto trace completed", "server", sv.Name, "test", test.ID, "hops", tr.TotalHops)
 }

@@ -7,6 +7,7 @@ package config
 import (
 	"crypto/rand"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net/url"
@@ -220,11 +221,11 @@ func CreateDefault(path string) (*Config, error) {
 	content := fmt.Sprintf(defaultYAML, newSecret())
 	if dir := filepath.Dir(path); dir != "" {
 		if err := os.MkdirAll(dir, 0o755); err != nil {
-			return nil, fmt.Errorf("Standard-Konfiguration konnte nicht erstellt werden (%s): %w", path, err)
+			return nil, fmt.Errorf("default configuration could not be created (%s): %w", path, err)
 		}
 	}
 	if err := os.WriteFile(path, []byte(content), 0600); err != nil {
-		return nil, fmt.Errorf("Standard-Konfiguration konnte nicht erstellt werden (%s): %w", path, err)
+		return nil, fmt.Errorf("default configuration could not be created (%s): %w", path, err)
 	}
 	return Load(path)
 }
@@ -234,12 +235,12 @@ func CreateDefault(path string) (*Config, error) {
 func Load(path string) (*Config, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
-		return nil, fmt.Errorf("Konfiguration konnte nicht gelesen werden: %w", err)
+		return nil, fmt.Errorf("configuration could not be read: %w", err)
 	}
 
 	cfg := defaults()
 	if err := yaml.Unmarshal(data, cfg); err != nil {
-		return nil, fmt.Errorf("Konfiguration ist ungültig: %w", err)
+		return nil, fmt.Errorf("configuration is invalid: %w", err)
 	}
 	if err := cfg.applyEnv(os.LookupEnv); err != nil {
 		return nil, err
@@ -277,28 +278,28 @@ func defaults() *Config {
 
 func (c *Config) validate() error {
 	if c.Web.Listen == "" {
-		return fmt.Errorf("web.listen darf nicht leer sein")
+		return errors.New("web.listen must not be empty")
 	}
 	var lvl slog.Level
 	if err := lvl.UnmarshalText([]byte(c.Log.Level)); err != nil {
-		return fmt.Errorf("log.level ist ungültig: %q", c.Log.Level)
+		return fmt.Errorf("log.level is invalid: %q", c.Log.Level)
 	}
 	if d, err := c.Auth.SessionDuration(); err != nil || d < time.Minute {
-		return fmt.Errorf("auth.session_ttl muss eine Dauer von mindestens 1m sein (z. B. 12h): %q", c.Auth.SessionTTL)
+		return fmt.Errorf("auth.session_ttl must be a duration of at least 1m (e.g. 12h): %q", c.Auth.SessionTTL)
 	}
 	switch c.Log.Format {
 	case "", "text", "json":
 	default:
-		return fmt.Errorf("log.format muss text oder json sein: %q", c.Log.Format)
+		return fmt.Errorf("log.format must be text or json: %q", c.Log.Format)
 	}
 	if (c.GeoIP.MaxMindAccountID == "") != (c.GeoIP.MaxMindLicenseKey == "") {
-		return fmt.Errorf("geoip.maxmind_account_id und geoip.maxmind_license_key müssen gemeinsam gesetzt sein")
+		return errors.New("geoip.maxmind_account_id and geoip.maxmind_license_key must be set together")
 	}
 	if c.Map.TileURL != "" {
 		u, err := url.Parse(tilePlaceholders.Replace(c.Map.TileURL))
 		if err != nil || (u.Scheme != "http" && u.Scheme != "https") ||
 			!strings.Contains(c.Map.TileURL, "{z}") || !strings.Contains(c.Map.TileURL, "{x}") || !strings.Contains(c.Map.TileURL, "{y}") {
-			return fmt.Errorf("map.tile_url muss eine http(s)-URL mit {z}, {x} und {y} sein: %q", c.Map.TileURL)
+			return fmt.Errorf("map.tile_url must be an http(s) URL with {z}, {x} and {y}: %q", c.Map.TileURL)
 		}
 	}
 	return nil
@@ -307,7 +308,7 @@ func (c *Config) validate() error {
 func newSecret() string {
 	b := make([]byte, 32)
 	if _, err := rand.Read(b); err != nil {
-		panic("Zufallsgenerator nicht verfügbar: " + err.Error())
+		panic("random number generator not available: " + err.Error())
 	}
 	return hex.EncodeToString(b)
 }

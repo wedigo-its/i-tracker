@@ -12,6 +12,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"i-tracker/internal/i18n"
 )
 
 // TestMain lässt die Test-Binary als gefälschtes iperf3 auftreten: Mit
@@ -45,17 +47,17 @@ func TestInstallCommands(t *testing.T) {
 	}{
 		{"windows winget", "windows", []string{"winget"}, false,
 			[][]string{{"winget", "install", "--id", "ar51an.iPerf3", "-e", "--silent", "--accept-package-agreements", "--accept-source-agreements", "--disable-interactivity"}}, ""},
-		{"windows ohne winget", "windows", nil, false, nil, "winget ist nicht verfügbar"},
+		{"windows ohne winget", "windows", nil, false, nil, "winget is not available"},
 		{"debian als root", "linux", []string{"apt-get", "sudo"}, true,
 			[][]string{{"apt-get", "update"}, {"apt-get", "install", "-y", "iperf3"}}, ""},
 		{"debian mit sudo", "linux", []string{"apt-get", "sudo"}, false,
 			[][]string{{"sudo", "-n", "apt-get", "update"}, {"sudo", "-n", "apt-get", "install", "-y", "iperf3"}}, ""},
 		{"fedora", "linux", []string{"dnf", "yum"}, true, [][]string{{"dnf", "install", "-y", "iperf3"}}, ""},
 		{"alpine", "linux", []string{"apk"}, true, [][]string{{"apk", "add", "--no-cache", "iperf3"}}, ""},
-		{"ohne root und sudo", "linux", []string{"zypper"}, false, nil, "Root-Rechte nötig"},
-		{"kein Paketmanager", "linux", nil, true, nil, "kein unterstützter Paketmanager"},
+		{"ohne root und sudo", "linux", []string{"zypper"}, false, nil, "requires root privileges"},
+		{"kein Paketmanager", "linux", nil, true, nil, "no supported package manager"},
 		{"macOS", "darwin", []string{"brew"}, false, [][]string{{"brew", "install", "iperf3"}}, ""},
-		{"unbekannt", "plan9", nil, true, nil, "nicht unterstützt"},
+		{"unbekannt", "plan9", nil, true, nil, "not supported"},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
@@ -189,7 +191,7 @@ func TestInstallFailureCanBeRetried(t *testing.T) {
 		t.Fatal(err)
 	}
 	st := waitInstalled(t, r)
-	if st.Available || !st.Installable || !strings.Contains(st.Error, "Installation fehlgeschlagen") || !strings.Contains(st.Error, "Zugriff verweigert") {
+	if st.Available || !st.Installable || !strings.Contains(st.Error, "Installation failed") || !strings.Contains(st.Error, "Zugriff verweigert") {
 		t.Fatalf("Status: %+v", st)
 	}
 	if err := r.InstallAsync(); err != nil {
@@ -214,18 +216,18 @@ func TestNotInstallable(t *testing.T) {
 	placeFakeIperf(t, dir)
 	t.Setenv("FAKE_IPERF3_VERSION", "3.12")
 	r.Prepare("", true)
-	if st := r.Status(); st.Installable || st.Installing || *calls != 0 || !strings.Contains(st.Error, "zu alt") {
+	if st := r.Status(); st.Installable || st.Installing || *calls != 0 || !strings.Contains(st.Error, "too old") {
 		t.Fatalf("zu alt: %+v, Aufrufe %d", st, *calls)
 	}
 }
 
 func TestNoPackageManager(t *testing.T) {
 	isolateSearch(t)
-	stubInstall(t, errors.New("kein unterstützter Paketmanager gefunden"), func(context.Context) error { return nil })
+	stubInstall(t, i18n.E("err.install.no_package_manager"), func(context.Context) error { return nil })
 	r := NewRunner(nil, "iperf3")
 	t.Cleanup(r.Stop)
 	r.Prepare("", true)
-	if st := r.Status(); st.Installable || st.Installing || !strings.Contains(st.Error, "kein unterstützter Paketmanager") {
+	if st := r.Status(); st.Installable || st.Installing || !strings.Contains(st.Error, "no supported package manager") || !strings.Contains(i18n.ErrorIn(i18n.DE, st.Err), "kein unterstützter Paketmanager") {
 		t.Fatalf("Status: %+v", st)
 	}
 }

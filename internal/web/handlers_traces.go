@@ -8,12 +8,13 @@ import (
 	"sync"
 	"unicode/utf8"
 
+	"i-tracker/internal/i18n"
 	"i-tracker/internal/model"
 	"i-tracker/internal/store"
 	"i-tracker/internal/trace"
 )
 
-const msgTraceNotFound = "Trace nicht gefunden"
+const msgTraceNotFound = "err.trace.not_found"
 
 // testTraces verhindert, dass für denselben Test mehrere Traces gleichzeitig laufen.
 type testTraces struct {
@@ -58,14 +59,14 @@ func (s *Server) handleStartTestTrace(w http.ResponseWriter, r *http.Request, _ 
 		return
 	}
 	if _, err := s.store.TraceByTestID(r.Context(), id); err == nil {
-		writeError(w, r, http.StatusBadRequest, "Für diesen Test existiert bereits ein Trace")
+		writeError(w, r, http.StatusBadRequest, "err.trace.exists")
 		return
 	} else if !errors.Is(err, store.ErrNotFound) {
 		writeInternal(w, r, err)
 		return
 	}
 	if !s.testTraces.start(id) {
-		writeError(w, r, http.StatusBadRequest, "Für diesen Test läuft bereits ein Trace")
+		writeError(w, r, http.StatusBadRequest, "err.trace.running")
 		return
 	}
 
@@ -74,12 +75,12 @@ func (s *Server) handleStartTestTrace(w http.ResponseWriter, r *http.Request, _ 
 		tr := s.tracer.Run(context.Background(), sv.Host, trace.DefaultOptions(), nil)
 		tr.TestID = &id
 		if err := s.store.CreateTrace(context.Background(), tr); err != nil {
-			slog.Error("Trace konnte nicht gespeichert werden", "test", id, "error", err)
+			slog.Error("Trace could not be saved", "test", id, "error", err)
 			return
 		}
-		slog.Info("Trace abgeschlossen", "test", id, "hops", tr.TotalHops, "completed", tr.Completed)
+		slog.Info("Trace completed", "test", id, "hops", tr.TotalHops, "completed", tr.Completed)
 	}()
-	writeJSON(w, r, http.StatusAccepted, map[string]any{"message": "Trace gestartet", "test_id": id})
+	writeJSON(w, r, http.StatusAccepted, map[string]any{"message": message(r, "msg.trace.started"), "test_id": id})
 }
 
 func (s *Server) handleGetTestTrace(w http.ResponseWriter, r *http.Request, _ *model.User) {
@@ -110,19 +111,19 @@ func (s *Server) handleCreateTrace(w http.ResponseWriter, r *http.Request, _ *mo
 	if !decodeJSON(w, r, &req) {
 		return
 	}
-	var msg string
+	var invalid error
 	switch n := utf8.RuneCountInString(req.Destination); {
 	case n < 1 || n > 255:
-		msg = "Ziel muss 1–255 Zeichen lang sein"
+		invalid = i18n.E("err.trace.destination_length")
 	case req.MaxHops < 1 || req.MaxHops > 64:
-		msg = "max_hops muss zwischen 1 und 64 liegen"
+		invalid = i18n.E("err.trace.max_hops")
 	case req.Timeout < 1 || req.Timeout > 10:
-		msg = "timeout muss zwischen 1 und 10 Sekunden liegen"
+		invalid = i18n.E("err.trace.timeout")
 	case req.Count < 1 || req.Count > 10:
-		msg = "count muss zwischen 1 und 10 liegen"
+		invalid = i18n.E("err.trace.count")
 	}
-	if msg != "" {
-		writeError(w, r, http.StatusUnprocessableEntity, msg)
+	if invalid != nil {
+		writeErr(w, r, http.StatusUnprocessableEntity, invalid)
 		return
 	}
 
@@ -131,6 +132,7 @@ func (s *Server) handleCreateTrace(w http.ResponseWriter, r *http.Request, _ *mo
 		writeInternal(w, r, err)
 		return
 	}
+	localizeTraces(r, tr)
 	writeJSON(w, r, http.StatusCreated, tr)
 }
 
@@ -145,7 +147,7 @@ func (s *Server) handleGetTrace(w http.ResponseWriter, r *http.Request, _ *model
 func (s *Server) handleListTraces(w http.ResponseWriter, r *http.Request, _ *model.User) {
 	limit, err := queryInt(r, "limit", 10, 1, 1000)
 	if err != nil {
-		writeError(w, r, http.StatusUnprocessableEntity, err.Error())
+		writeErr(w, r, http.StatusUnprocessableEntity, err)
 		return
 	}
 	traces, err := s.store.ListTraces(r.Context(), limit)
@@ -153,6 +155,7 @@ func (s *Server) handleListTraces(w http.ResponseWriter, r *http.Request, _ *mod
 		writeInternal(w, r, err)
 		return
 	}
+	localizeTraceList(r, traces)
 	writeJSON(w, r, http.StatusOK, traces)
 }
 
@@ -166,6 +169,7 @@ func (s *Server) handleTracesByTest(w http.ResponseWriter, r *http.Request, _ *m
 		writeInternal(w, r, err)
 		return
 	}
+	localizeTraceList(r, traces)
 	writeJSON(w, r, http.StatusOK, traces)
 }
 
@@ -187,6 +191,7 @@ func (s *Server) writeTrace(w http.ResponseWriter, r *http.Request, load func(co
 		writeInternal(w, r, err)
 		return
 	}
+	localizeTraces(r, tr)
 	writeJSON(w, r, http.StatusOK, tr)
 }
 
@@ -199,5 +204,5 @@ func (s *Server) deleteTrace(w http.ResponseWriter, r *http.Request, err error) 
 		writeInternal(w, r, err)
 		return
 	}
-	writeJSON(w, r, http.StatusOK, map[string]string{"message": "Trace gelöscht"})
+	writeJSON(w, r, http.StatusOK, map[string]string{"message": message(r, "msg.trace.deleted")})
 }

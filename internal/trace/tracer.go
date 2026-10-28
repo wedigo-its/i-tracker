@@ -5,7 +5,6 @@ import (
 	"bytes"
 	"context"
 	"errors"
-	"fmt"
 	"math/rand/v2"
 	"net"
 	"os"
@@ -16,6 +15,7 @@ import (
 	"time"
 
 	"i-tracker/internal/db"
+	"i-tracker/internal/i18n"
 	"i-tracker/internal/model"
 )
 
@@ -73,8 +73,7 @@ func (t *Tracer) Run(ctx context.Context, destination string, opts Options, onHo
 
 	destIP, err := resolveIPv4(ctx, destination)
 	if err != nil {
-		msg := "Ziel konnte nicht aufgelöst werden: " + err.Error()
-		tr.ErrorMessage = &msg
+		tr.SetError(i18n.Wrap(err, "err.trace.resolve"))
 		return tr
 	}
 	tr.DestinationIP = &destIP
@@ -100,8 +99,7 @@ func (t *Tracer) Run(ctx context.Context, destination string, opts Options, onHo
 		}
 	}
 	if err != nil {
-		msg := err.Error()
-		tr.ErrorMessage = &msg
+		tr.SetError(err)
 	} else {
 		tr.Completed = true
 	}
@@ -117,13 +115,13 @@ func (t *Tracer) trace(ctx context.Context, destIP string, o Options, handle fun
 	cmd.Stderr = &stderr
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
-		return err
+		return i18n.Wrap(err, "err.trace.tool_start", name)
 	}
 	if err := cmd.Start(); err != nil {
 		if errors.Is(err, exec.ErrNotFound) || errors.Is(err, os.ErrNotExist) {
-			return fmt.Errorf("%s nicht gefunden – bitte installieren", name)
+			return i18n.E("err.trace.tool_missing", name)
 		}
-		return fmt.Errorf("%s konnte nicht gestartet werden: %w", name, err)
+		return i18n.Wrap(err, "err.trace.tool_start", name)
 	}
 
 	reached := false
@@ -145,14 +143,14 @@ func (t *Tracer) trace(ctx context.Context, destIP string, o Options, handle fun
 	case reached:
 		return nil
 	case errors.Is(ctx.Err(), context.DeadlineExceeded):
-		return fmt.Errorf("Zeitüberschreitung nach %s", maxDuration)
+		return i18n.E("err.timeout", maxDuration)
 	case ctx.Err() != nil:
-		return errors.New("Abgebrochen")
+		return i18n.E("err.trace.aborted")
 	case waitErr != nil:
 		if msg := strings.TrimSpace(stderr.String()); msg != "" {
-			return errors.New(msg)
+			return i18n.Foreign(msg)
 		}
-		return fmt.Errorf("%s beendet mit Fehler: %w", name, waitErr)
+		return i18n.Wrap(waitErr, "err.trace.tool_exit", name)
 	}
 	return nil
 }
@@ -209,7 +207,7 @@ func resolveIPv4(ctx context.Context, host string) (string, error) {
 		if v4 := ip.To4(); v4 != nil {
 			return v4.String(), nil
 		}
-		return "", errors.New("nur IPv4 wird unterstützt")
+		return "", i18n.E("err.trace.ipv4_only")
 	}
 	ips, err := net.DefaultResolver.LookupIP(ctx, "ip4", host)
 	if err != nil {

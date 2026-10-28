@@ -57,7 +57,7 @@ func (set scanner) Scan(src any) error {
 	case []byte:
 		s = string(v)
 	default:
-		return fmt.Errorf("Zeitstempel: unerwarteter Typ %T", src)
+		return fmt.Errorf("timestamp: unexpected type %T", src)
 	}
 	t, err := parseTime(s)
 	if err != nil {
@@ -74,5 +74,5 @@ func parseTime(s string) (time.Time, error) {
 			return t.UTC(), nil
 		}
 	}
-	return time.Time{}, fmt.Errorf("Zeitstempel %q nicht lesbar", s)
+	return time.Time{}, fmt.Errorf("timestamp %q not readable", s)
 }

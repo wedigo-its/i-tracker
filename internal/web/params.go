@@ -1,25 +1,26 @@
 package web
 
 import (
-	"fmt"
 	"net/http"
 	"strconv"
 	"strings"
 	"time"
+
+	"i-tracker/internal/i18n"
 )
 
-// pathID liest einen numerischen Pfadparameter; bei Fehlern wird mit 422
-// geantwortet und ok ist false.
+// pathID reads a numeric path parameter; on errors it answers 422 and ok is
+// false.
 func pathID(w http.ResponseWriter, r *http.Request, name string) (id int64, ok bool) {
 	id, err := strconv.ParseInt(r.PathValue(name), 10, 64)
 	if err != nil {
-		writeError(w, r, http.StatusUnprocessableEntity, fmt.Sprintf("Ungültiger Parameter %q", name))
+		writeError(w, r, http.StatusUnprocessableEntity, "err.param.invalid", name)
 		return 0, false
 	}
 	return id, true
 }
 
-// queryInt liest einen optionalen Ganzzahl-Parameter im Bereich [lo, hi].
+// queryInt reads an optional integer parameter in the range [lo, hi].
 func queryInt(r *http.Request, name string, def, lo, hi int) (int, error) {
 	v := r.URL.Query().Get(name)
 	if v == "" {
@@ -27,13 +28,13 @@ func queryInt(r *http.Request, name string, def, lo, hi int) (int, error) {
 	}
 	n, err := strconv.Atoi(v)
 	if err != nil || n < lo || n > hi {
-		return 0, fmt.Errorf("Parameter %q muss eine Zahl zwischen %d und %d sein", name, lo, hi)
+		return 0, i18n.E("err.param.range", name, lo, hi)
 	}
 	return n, nil
 }
 
-// queryBool liest einen optionalen Wahrheitswert; nil bedeutet „nicht angegeben".
-// Akzeptiert true/false, 1/0, yes/no, on/off.
+// queryBool reads an optional boolean; nil means "not given". Accepts
+// true/false, 1/0, yes/no, on/off.
 func queryBool(r *http.Request, name string) (*bool, error) {
 	v := strings.ToLower(r.URL.Query().Get(name))
 	var b bool
@@ -45,12 +46,12 @@ func queryBool(r *http.Request, name string) (*bool, error) {
 	case "false", "0", "no", "off":
 		b = false
 	default:
-		return nil, fmt.Errorf("Parameter %q muss true oder false sein", name)
+		return nil, i18n.E("err.param.bool", name)
 	}
 	return &b, nil
 }
 
-// queryInt64 liest einen optionalen Ganzzahl-Parameter; nil = nicht angegeben.
+// queryInt64 reads an optional integer parameter; nil = not given.
 func queryInt64(r *http.Request, name string) (*int64, error) {
 	v := r.URL.Query().Get(name)
 	if v == "" {
@@ -58,13 +59,13 @@ func queryInt64(r *http.Request, name string) (*int64, error) {
 	}
 	n, err := strconv.ParseInt(v, 10, 64)
 	if err != nil {
-		return nil, fmt.Errorf("Parameter %q muss eine Zahl sein", name)
+		return nil, i18n.E("err.param.number", name)
 	}
 	return &n, nil
 }
 
-// queryTime liest einen optionalen Zeitpunkt (ISO 8601, mit oder ohne
-// Zeitzone, oder nur Datum). Angaben ohne Zeitzone gelten als UTC.
+// queryTime reads an optional point in time (ISO 8601, with or without time
+// zone, or a date only). Values without a time zone count as UTC.
 func queryTime(r *http.Request, name string) (*time.Time, error) {
 	v := r.URL.Query().Get(name)
 	if v == "" {
@@ -76,10 +77,10 @@ func queryTime(r *http.Request, name string) (*time.Time, error) {
 			return &t, nil
 		}
 	}
-	return nil, fmt.Errorf("Parameter %q ist kein gültiger Zeitpunkt", name)
+	return nil, i18n.E("err.param.time", name)
 }
 
-// paging liest skip (≥ 0) und limit (1–maxLimit, Standard defLimit).
+// paging reads skip (≥ 0) and limit (1–maxLimit, default defLimit).
 func paging(r *http.Request, defLimit, maxLimit int) (skip, limit int, err error) {
 	if skip, err = queryInt(r, "skip", 0, 0, 1<<31-1); err != nil {
 		return 0, 0, err

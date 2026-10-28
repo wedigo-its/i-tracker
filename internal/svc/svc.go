@@ -32,7 +32,7 @@ func config(cfgPath string) *service.Config {
 	cfg := &service.Config{
 		Name:             Name,
 		DisplayName:      "i-Tracker",
-		Description:      "i-Tracker – zeitgesteuerte iperf3-Tests mit Weboberfläche.",
+		Description:      "i-Tracker – scheduled iperf3 tests with a web interface.",
 		Arguments:        args,
 		WorkingDirectory: wd,
 		Option:           service.KeyValue{},
@@ -83,7 +83,7 @@ func Stop() error { return control("stop", "") }
 // Restart startet den Dienst neu.
 func Restart() error { return control("restart", "") }
 
-// Status meldet "läuft", "gestoppt", "nicht installiert" oder "unbekannt".
+// Status reports "running", "stopped", "not installed" or "unknown".
 func Status() (string, error) {
 	s, err := service.New(noopProgram{}, config(""))
 	if err != nil {
@@ -92,17 +92,17 @@ func Status() (string, error) {
 	st, err := s.Status()
 	if err != nil {
 		if errors.Is(err, service.ErrNotInstalled) {
-			return "nicht installiert", nil
+			return "not installed", nil
 		}
 		return "", err
 	}
 	switch st {
 	case service.StatusRunning:
-		return "läuft", nil
+		return "running", nil
 	case service.StatusStopped:
-		return "gestoppt", nil
+		return "stopped", nil
 	default:
-		return "unbekannt", nil
+		return "unknown", nil
 	}
 }
 

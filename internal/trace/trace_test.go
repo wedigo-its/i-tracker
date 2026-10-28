@@ -195,7 +195,7 @@ func TestTracerRun(t *testing.T) {
 func TestTracerMissingCommand(t *testing.T) {
 	tr := NewTracer(nil, filepath.Join(t.TempDir(), "kein-traceroute"))
 	res := tr.Run(context.Background(), "127.0.0.1", DefaultOptions(), nil)
-	if res.Completed || res.ErrorMessage == nil || !strings.Contains(*res.ErrorMessage, "nicht gefunden") {
+	if res.Completed || res.ErrorMessage == nil || !strings.Contains(*res.ErrorMessage, "not found") {
 		t.Errorf("Fehler erwartet: %+v", res)
 	}
 }

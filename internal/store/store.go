@@ -12,9 +12,9 @@ import (
 
 var (
 	// ErrNotFound wird geliefert, wenn ein angefragter Datensatz nicht existiert.
-	ErrNotFound = errors.New("Datensatz nicht gefunden")
+	ErrNotFound = errors.New("record not found")
 	// ErrDuplicate wird geliefert, wenn ein eindeutiger Wert bereits vergeben ist.
-	ErrDuplicate = errors.New("Wert bereits vergeben")
+	ErrDuplicate = errors.New("value already taken")
 )
 
 // mapUnique übersetzt eine UNIQUE-Verletzung in ErrDuplicate.

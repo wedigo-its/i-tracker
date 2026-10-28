@@ -600,6 +600,11 @@ function serverColor(servers, id) {
 }
 
 function protocolLabel(p) { return (p || '').toUpperCase(); }
+// hopCity returns the city of a hop. Versions before 2026.10.28 stored an
+// estimated hop without a known city as LEGACY_UNKNOWN_CITY (German); it is
+// shown as unknown in the UI language.
+const LEGACY_UNKNOWN_CITY = '? Unbekannt';
+function hopCity(h) { return h.city === LEGACY_UNKNOWN_CITY ? '? ' + t('unknown') : h.city; }
 function directionLabel(d) { return STRINGS['dir.' + d] ? t('dir.' + d) : d; }
 function streamsLabel(n) { return t(n === 1 ? 'streams.one' : 'streams.other', { n }); }
 
@@ -1569,10 +1574,8 @@ pages.tests = testsPage;
 // Farben setzt das CSS (.map-land), sie folgen so dem Theme. Wer einen eigenen
 // Kachelserver hat, trägt ihn als map.tile_url in die Konfiguration ein.
 const WORLD_URL = '/static/vendor/naturalearth/world-110m.geojson';
-const naturalEarthAttribution = () => (LANG === 'de' ? 'Kartendaten: ' : 'Map data: ')
-  + '<a href="https://www.naturalearthdata.com/" rel="noopener">Natural Earth</a>';
-const osmAttribution = () => '&copy; <a href="https://www.openstreetmap.org/copyright" rel="noopener">OpenStreetMap</a>'
-  + (LANG === 'de' ? '-Mitwirkende' : ' contributors');
+const naturalEarthAttribution = () => t('map.dataBy', { src: '<a href="https://www.naturalearthdata.com/" rel="noopener">Natural Earth</a>' });
+const osmAttribution = () => '&copy; ' + t('map.osmContributors', { osm: '<a href="https://www.openstreetmap.org/copyright" rel="noopener">OpenStreetMap</a>' });
 // Herkunft der Standortdaten; den Quellenhinweis verlangen die Lizenzen von
 // DB-IP (CC BY 4.0) und MaxMind auf jeder Seite, die Ergebnisse zeigt.
 const GEO_SOURCES = {
@@ -1779,7 +1782,7 @@ const peering = {
         className: 'hop-icon', iconSize: [26, 26], iconAnchor: [13, 13],
         html: `<div class="hop-marker ${kind}">${h.hop_number}</div>`,
       });
-      const place = [h.city, h.country].filter(Boolean).join(', ') || t('unknown');
+      const place = [hopCity(h), h.country].filter(Boolean).join(', ') || t('unknown');
       L.marker([h.latitude, h.longitude], { icon }).bindPopup(
         `<strong>${t('peering.hop', { n: h.hop_number })}</strong>${h.geoip_interpolated ? ` <span class="text-warn">${t('peering.estimated')}</span>` : ''}<br>`
         + `${esc(h.ip_address)}${h.hostname ? '<br>' + esc(h.hostname) : ''}<br>`
@@ -1827,7 +1830,7 @@ const peering = {
     }).join('<span class="path-arrow">→</span>') || `<span class="muted">${t('peering.noHopsYet')}</span>`;
 
     document.getElementById('pmHops').innerHTML = hops.map(h => {
-      const place = [h.city, h.country_code || h.country].filter(Boolean).join(', ');
+      const place = [hopCity(h), h.country_code || h.country].filter(Boolean).join(', ');
       return `<tr>
         <td>${h.hop_number}</td>
         <td class="mono">${h.responded ? esc(h.ip_address) : `<span class="muted">${t('peering.noReply')}</span>`}</td>

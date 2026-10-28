@@ -8,7 +8,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"log/slog"
 	"os"
 	"os/exec"
@@ -18,6 +17,7 @@ import (
 	"time"
 
 	"i-tracker/internal/db"
+	"i-tracker/internal/i18n"
 	"i-tracker/internal/model"
 	"i-tracker/internal/store"
 )
@@ -142,7 +142,7 @@ func (r *Runner) process(id int64) {
 	case r.sem <- struct{}{}:
 		defer func() { <-r.sem }()
 	case <-r.ctx.Done():
-		r.finish(ctx, id, nil, model.TestResult{}, "Abgebrochen: Dienst wurde beendet", "")
+		r.finish(ctx, id, nil, model.TestResult{}, i18n.E("err.test.aborted_stop"), "")
 		return
 	}
 
@@ -150,44 +150,43 @@ func (r *Runner) process(id int64) {
 	if err != nil {
 		// Test wurde zwischenzeitlich gelöscht (oder DB-Fehler): nichts mehr zu tun.
 		if !errors.Is(err, store.ErrNotFound) {
-			slog.Error("Test konnte nicht geladen werden", "test", id, "error", err)
+			slog.Error("Test could not be loaded", "test", id, "error", err)
 		}
 		r.deleteLive(id)
 		return
 	}
 	sv, err := r.store.ServerByID(ctx, t.ServerID)
 	if err != nil {
-		r.finish(ctx, id, t, model.TestResult{}, "Server nicht gefunden", "")
+		r.finish(ctx, id, t, model.TestResult{}, i18n.E("err.server.not_found"), "")
 		return
 	}
 
 	if err := r.store.StartTest(ctx, id, db.Now()); err != nil {
-		slog.Error("Test konnte nicht gestartet werden", "test", id, "error", err)
+		slog.Error("Test could not be marked as running", "test", id, "error", err)
 	}
 	r.updateLive(id, func(l *LiveStatus) { l.Status = model.StatusRunning })
-	slog.Info("Starte iperf3-Test", "test", id, "server", sv.Name, "direction", t.Direction, "protocol", t.Protocol)
+	slog.Info("Starting iperf3 test", "test", id, "server", sv.Name, "direction", t.Direction, "protocol", t.Protocol)
 
-	res, errMsg, raw := r.execute(t, sv)
-	r.finish(ctx, id, t, res, errMsg, raw)
+	res, failure, raw := r.execute(t, sv)
+	r.finish(ctx, id, t, res, failure, raw)
 }
 
-// finish speichert das Ergebnis, setzt den Live-Status auf den Endstand und
-// entfernt ihn nach liveRetention.
-func (r *Runner) finish(ctx context.Context, id int64, t *model.Test, res model.TestResult, errMsg, raw string) {
+// finish stores the result (failure nil = success), sets the live status to
+// the final state and removes it after liveRetention.
+func (r *Runner) finish(ctx context.Context, id int64, t *model.Test, res model.TestResult, failure error, raw string) {
 	status := model.StatusCompleted
-	var errPtr, rawPtr *string
-	if errMsg != "" {
+	var rawPtr *string
+	if failure != nil {
 		status = model.StatusFailed
-		errPtr = &errMsg
-		slog.Warn("iperf3-Test fehlgeschlagen", "test", id, "error", errMsg)
+		slog.Warn("iperf3 test failed", "test", id, "error", failure)
 	} else {
-		slog.Info("iperf3-Test abgeschlossen", "test", id)
+		slog.Info("iperf3 test completed", "test", id)
 	}
 	if raw != "" {
 		rawPtr = &raw
 	}
-	if err := r.store.FinishTest(ctx, id, status, db.Now(), res, errPtr, rawPtr); err != nil && !errors.Is(err, store.ErrNotFound) {
-		slog.Error("Testergebnis konnte nicht gespeichert werden", "test", id, "error", err)
+	if err := r.store.FinishTest(ctx, id, status, db.Now(), res, failure, rawPtr); err != nil && !errors.Is(err, store.ErrNotFound) {
+		slog.Error("Test result could not be saved", "test", id, "error", err)
 	}
 
 	r.updateLive(id, func(l *LiveStatus) {
@@ -208,8 +207,9 @@ func (r *Runner) finish(ctx context.Context, id int64, t *model.Test, res model.
 	time.AfterFunc(liveRetention, func() { r.deleteLive(id) })
 }
 
-// execute startet iperf3 und liefert Messwerte, ggf. eine Fehlermeldung und die Rohausgabe.
-func (r *Runner) execute(t *model.Test, sv *model.Server) (res model.TestResult, errMsg, raw string) {
+// execute runs iperf3 and returns the results, the reason of a failure (nil
+// on success) and the raw output.
+func (r *Runner) execute(t *model.Test, sv *model.Server) (res model.TestResult, failure error, raw string) {
 	timeout := time.Duration(t.Duration)*time.Second + 30*time.Second
 	ctx, cancel := context.WithTimeout(r.ctx, timeout)
 	defer cancel()
@@ -221,13 +221,13 @@ func (r *Runner) execute(t *model.Test, sv *model.Server) (res model.TestResult,
 	cmd.Stderr = &stderr
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
-		return res, err.Error(), ""
+		return res, i18n.Wrap(err, "err.iperf.start"), ""
 	}
 	if err := cmd.Start(); err != nil {
 		if errors.Is(err, exec.ErrNotFound) || errors.Is(err, os.ErrNotExist) {
-			return res, "iperf3 nicht gefunden – bitte installieren oder iperf.path konfigurieren", ""
+			return res, i18n.E("err.iperf.not_found"), ""
 		}
-		return res, "iperf3 konnte nicht gestartet werden: " + err.Error(), ""
+		return res, i18n.Wrap(err, "err.iperf.start"), ""
 	}
 
 	stopProgress := r.trackProgress(t.ID, t.Duration)
@@ -278,24 +278,24 @@ func (r *Runner) execute(t *model.Test, sv *model.Server) (res model.TestResult,
 	}
 	switch {
 	case r.ctx.Err() != nil:
-		return res, "Abgebrochen: Dienst wurde beendet", raw
+		return res, i18n.E("err.test.aborted_stop"), raw
 	case errors.Is(ctx.Err(), context.DeadlineExceeded):
-		return res, fmt.Sprintf("Zeitüberschreitung nach %s", timeout), raw
+		return res, i18n.E("err.timeout", timeout), raw
 	case iperfErr != "":
-		return res, iperfErr, raw
+		return res, i18n.Foreign(iperfErr), raw
 	case waitErr != nil:
 		if msg := strings.TrimSpace(stderr.String()); msg != "" {
-			return res, msg, raw
+			return res, i18n.Foreign(msg), raw
 		}
-		return res, "iperf3 beendet mit Fehler: " + waitErr.Error(), raw
+		return res, i18n.Wrap(waitErr, "err.iperf.exit"), raw
 	case end == nil:
-		return res, "iperf3 lieferte keine Ergebnisse", raw
+		return res, i18n.E("err.iperf.no_results"), raw
 	}
 	res, ok := endResult(*end, t.Direction)
 	if !ok {
-		return res, fmt.Sprintf("iperf3 lieferte keine Ergebnisse für die Richtung %s", t.Direction), raw
+		return res, i18n.E("err.iperf.no_results_direction", t.Direction), raw
 	}
-	return res, "", raw
+	return res, nil, raw
 }
 
 // trackProgress aktualisiert Fortschritt und Laufzeit alle 500 ms. Die

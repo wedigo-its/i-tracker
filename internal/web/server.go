@@ -2,7 +2,6 @@
 package web
 
 import (
-	"bytes"
 	"embed"
 	"encoding/json"
 	"io"
@@ -207,7 +206,7 @@ func (s *Server) handleStatus(w http.ResponseWriter, r *http.Request, u *model.U
 	if s.geoInfo != nil {
 		geo = s.geoInfo()
 	}
-	var ip any = s.runner.Status()
+	var ip any = s.iperfStatus(r)
 	if u == nil {
 		st := s.runner.Status()
 		ip = map[string]any{"available": st.Available, "installing": st.Installing, "version": st.Version}
@@ -220,6 +219,15 @@ func (s *Server) handleStatus(w http.ResponseWriter, r *http.Request, u *model.U
 	})
 }
 
+// iperfStatus returns the iperf3 status with its error in the request language.
+func (s *Server) iperfStatus(r *http.Request) iperf.Status {
+	st := s.runner.Status()
+	if st.Err != nil {
+		st.Error = i18n.ErrorIn(i18n.FromRequest(r), st.Err)
+	}
+	return st
+}
+
 func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, r, http.StatusOK, map[string]any{
 		"status":            "healthy",
@@ -227,85 +235,62 @@ func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// writeJSON schreibt v als JSON. Meldungstexte werden dabei in die Sprache
-// der Anfrage übersetzt (siehe localizeJSON).
+// writeJSON writes v as JSON. Texts in v must already be rendered in the
+// request language (writeErr, message, localizeTests, localizeTraces).
 func writeJSON(w http.ResponseWriter, r *http.Request, status int, v any) {
-	lang := i18n.FromRequest(r)
-	if lang != i18n.DE {
-		v = localizeJSON(v, lang)
-	}
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
-	w.Header().Set("Content-Language", lang)
+	w.Header().Set("Content-Language", i18n.FromRequest(r))
 	w.WriteHeader(status)
 	json.NewEncoder(w).Encode(v)
 }
 
-// messageKeys sind die JSON-Felder mit Meldungstexten. Nutzerdaten wie Namen
-// oder Beschreibungen werden nie übersetzt.
-var messageKeys = map[string]bool{"detail": true, "message": true, "warning": true, "error": true, "error_message": true}
-
-// localizeJSON übersetzt die Meldungsfelder in v (auch verschachtelt). Dazu
-// wird v einmal in eine generische Struktur umgewandelt; scheitert das,
-// bleibt v unverändert.
-func localizeJSON(v any, lang string) any {
-	data, err := json.Marshal(v)
-	if err != nil {
-		return v
-	}
-	dec := json.NewDecoder(bytes.NewReader(data))
-	dec.UseNumber()
-	var generic any
-	if err := dec.Decode(&generic); err != nil {
-		return v
-	}
-	var walk func(any)
-	walk = func(node any) {
-		switch n := node.(type) {
-		case map[string]any:
-			for k, val := range n {
-				if s, ok := val.(string); ok && messageKeys[k] {
-					n[k] = i18n.Translate(s, lang)
-				} else {
-					walk(val)
-				}
-			}
-		case []any:
-			for _, e := range n {
-				walk(e)
-			}
-		}
-	}
-	walk(generic)
-	return generic
+// errorBody is the JSON of an error response: detail is the message in the
+// request language (as in every earlier version), code its catalog key.
+type errorBody struct {
+	Detail string `json:"detail"`
+	Code   string `json:"code,omitempty"`
 }
 
-// writeError schreibt eine Fehlerantwort als {"detail": "..."}.
-func writeError(w http.ResponseWriter, r *http.Request, status int, detail string) {
-	writeJSON(w, r, status, map[string]string{"detail": detail})
+// writeErr answers with err rendered in the request language. Errors that
+// reach the UI are *i18n.Error values (i18n.E, i18n.Wrap); any other error
+// is shown with its own text.
+func writeErr(w http.ResponseWriter, r *http.Request, status int, err error) {
+	writeJSON(w, r, status, errorBody{Detail: i18n.ErrorIn(i18n.FromRequest(r), err), Code: i18n.KeyOf(err)})
 }
 
-// writeInternal protokolliert err und antwortet mit 500, ohne Interna preiszugeben.
+// writeError answers with the catalog message key and its arguments.
+func writeError(w http.ResponseWriter, r *http.Request, status int, key string, args ...any) {
+	writeErr(w, r, status, i18n.E(key, args...))
+}
+
+// message renders the catalog message key in the request language, for the
+// "message" field of a response.
+func message(r *http.Request, key string, args ...any) string {
+	return i18n.M(key, args...).In(i18n.FromRequest(r))
+}
+
+// writeInternal logs err and answers 500 without revealing internals.
 func writeInternal(w http.ResponseWriter, r *http.Request, err error) {
-	slog.Error("Interner Fehler", "method", r.Method, "path", r.URL.Path, "error", err)
-	writeError(w, r, http.StatusInternalServerError, "Interner Serverfehler")
+	slog.Error("Internal error", "method", r.Method, "path", r.URL.Path, "error", err)
+	writeError(w, r, http.StatusInternalServerError, "err.internal")
 }
 
-// decodeJSON liest den Request-Body nach dst; bei Fehlern wird mit 422
-// geantwortet und false geliefert.
+// decodeJSON reads the request body into dst; on errors it answers 422 and
+// returns false.
 func decodeJSON(w http.ResponseWriter, r *http.Request, dst any) bool {
 	body, err := io.ReadAll(http.MaxBytesReader(w, r.Body, 1<<20))
 	if err != nil {
-		writeError(w, r, http.StatusUnprocessableEntity, "Ungültiger Request-Body: "+err.Error())
+		writeErr(w, r, http.StatusUnprocessableEntity, i18n.Wrap(err, "err.invalid_body"))
 		return false
 	}
-	// encoding/json ersetzt ungültige Bytes stillschweigend durch U+FFFD; so
-	// würden falsch kodierte Umlaute unbemerkt verfälscht gespeichert.
+	// encoding/json silently replaces invalid bytes with U+FFFD; wrongly
+	// encoded umlauts would be stored corrupted without notice.
 	if !utf8.Valid(body) {
-		writeError(w, r, http.StatusUnprocessableEntity, "Ungültige Zeichenkodierung – erwartet wird UTF-8")
+		writeError(w, r, http.StatusUnprocessableEntity, "err.invalid_encoding")
 		return false
 	}
 	if err := json.Unmarshal(body, dst); err != nil {
-		writeError(w, r, http.StatusUnprocessableEntity, "Ungültiger Request-Body: "+err.Error())
+		writeErr(w, r, http.StatusUnprocessableEntity, i18n.Wrap(err, "err.invalid_body"))
 		return false
 	}
 	return true

@@ -25,6 +25,7 @@ import (
 
 	"i-tracker/internal/auth"
 	"i-tracker/internal/db"
+	"i-tracker/internal/i18n"
 	"i-tracker/internal/iperf"
 	"i-tracker/internal/model"
 	"i-tracker/internal/scheduler"
@@ -39,10 +40,10 @@ const (
 )
 
 func main() {
-	dbPath := flag.String("db", "i-tracker-demo.db", "Demo-Datenbank (wird neu erzeugt)")
-	listen := flag.String("listen", "127.0.0.1:8098", "Adresse der Oberfläche")
-	days := flag.Int("days", 30, "Tage Verlauf")
-	seedOnly := flag.Bool("seed-only", false, "Nur die Datenbank erzeugen, keine Oberfläche starten")
+	dbPath := flag.String("db", "i-tracker-demo.db", "demo database (created anew)")
+	listen := flag.String("listen", "127.0.0.1:8098", "address of the web interface")
+	days := flag.Int("days", 30, "days of history")
+	seedOnly := flag.Bool("seed-only", false, "only create the database, do not start the web interface")
 	flag.Parse()
 
 	for _, suffix := range []string{"", "-wal", "-shm"} {
@@ -75,7 +76,7 @@ func main() {
 		}
 		n += c
 	}
-	fmt.Printf("Demo-Datenbank %s: %d Server, %d Tests\n", *dbPath, len(profiles()), n)
+	fmt.Printf("Demo database %s: %d servers, %d tests\n", *dbPath, len(profiles()), n)
 	if *seedOnly {
 		return
 	}
@@ -94,7 +95,7 @@ func main() {
 		GeoIP:      geo.Info,
 		PublicRead: true,
 	})
-	slog.Info("Demo-Oberfläche läuft – Beenden mit Strg+C", "url", "http://"+*listen, "login", adminUser+" / "+adminPassword)
+	slog.Info("Demo web interface running, stop with Ctrl+C", "url", "http://"+*listen, "login", adminUser+" / "+adminPassword)
 	go func() {
 		if err := http.ListenAndServe(*listen, srv.Handler()); err != nil {
 			fail(err)
@@ -209,16 +210,16 @@ func (d *demo) seedServer(ctx context.Context, p profile, start, end time.Time) 
 		done := begun.Add(11 * time.Second)
 		status := model.StatusCompleted
 		var res model.TestResult
-		var errMsg *string
+		var failure error
 		age := end.Sub(t)
 		if p.failNight > 0 && age > time.Duration(p.failNight)*24*time.Hour && age < time.Duration(p.failNight)*24*time.Hour+3*time.Hour {
 			status = model.StatusFailed
-			msg := "unable to connect to server: Connection timed out"
-			errMsg = &msg
+			// What iperf3 itself reports; it has no translation.
+			failure = i18n.Foreign("unable to connect to server: Connection timed out")
 		} else {
 			res = d.result(p, test, t)
 		}
-		if err := d.st.FinishTest(ctx, test.ID, status, done, res, errMsg, nil); err != nil {
+		if err := d.st.FinishTest(ctx, test.ID, status, done, res, failure, nil); err != nil {
 			return count, err
 		}
 		if _, err := d.conn.ExecContext(ctx, `UPDATE tests SET created_at = ?, started_at = ?, completed_at = ? WHERE id = ?`,

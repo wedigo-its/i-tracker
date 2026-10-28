@@ -180,7 +180,7 @@ func TestRunnerMissingBinary(t *testing.T) {
 	test := env.submit(t, model.DirectionUpload)
 
 	d := env.waitDone(t, test.ID)
-	if d.Status != model.StatusFailed || d.ErrorMessage == nil || !strings.Contains(*d.ErrorMessage, "nicht gefunden") {
+	if d.Status != model.StatusFailed || d.ErrorMessage == nil || !strings.Contains(*d.ErrorMessage, "iperf3 not found") {
 		t.Fatalf("Status %s, Fehler %v", d.Status, deref2(d.ErrorMessage))
 	}
 }

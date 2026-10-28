@@ -2,7 +2,12 @@
 // in snake_case benannt; optionale Felder sind Pointer und werden als null serialisiert.
 package model
 
-import "time"
+import (
+	"strconv"
+	"time"
+
+	"i-tracker/internal/i18n"
+)
 
 // User ist ein Benutzerkonto.
 type User struct {
@@ -82,28 +87,29 @@ func DefaultServerSettings() ServerSettings {
 	}
 }
 
-// Validate prüft die Wertebereiche und liefert eine Fehlermeldung oder "".
-func (s ServerSettings) Validate() string {
+// Validate checks the value ranges; the error (an *i18n.Error) names the
+// first invalid field.
+func (s ServerSettings) Validate() error {
 	inRange := func(v, lo, hi int) bool { return v >= lo && v <= hi }
 	switch {
 	case !inRange(len([]rune(s.Name)), 1, 100):
-		return "Name muss 1–100 Zeichen lang sein"
+		return i18n.E("err.input.name_length")
 	case !inRange(len([]rune(s.Host)), 1, 255):
-		return "Host muss 1–255 Zeichen lang sein"
+		return i18n.E("err.input.host_length")
 	case !inRange(s.Port, 1, 65535):
-		return "Port muss zwischen 1 und 65535 liegen"
+		return i18n.E("err.input.port")
 	case !inRange(s.DefaultDuration, 1, 300):
-		return "Testdauer muss zwischen 1 und 300 Sekunden liegen"
+		return i18n.E("err.input.duration")
 	case !inRange(s.DefaultParallel, 1, 128):
-		return "Parallele Streams müssen zwischen 1 und 128 liegen"
+		return i18n.E("err.input.parallel")
 	case !inRange(s.DefaultNumStreams, 1, 128):
-		return "Anzahl Streams muss zwischen 1 und 128 liegen"
+		return i18n.E("err.input.streams")
 	case !s.DefaultProtocol.Valid():
-		return "Protokoll muss tcp oder udp sein"
+		return i18n.E("err.input.protocol")
 	case !s.DefaultDirection.Valid():
-		return "Richtung muss download, upload oder bidirectional sein"
+		return i18n.E("err.input.direction")
 	case s.ScheduleIntervalMinutes < 1:
-		return "Intervall muss mindestens 1 Minute betragen"
+		return i18n.E("err.input.interval")
 	}
 	return ValidateUDPBandwidth(s.DefaultUDPBandwidthMbps)
 }
@@ -111,13 +117,13 @@ func (s ServerSettings) Validate() string {
 // MaxUDPBandwidthMbps ist die höchste zulässige UDP-Zielbandbreite (100 Gbit/s).
 const MaxUDPBandwidthMbps = 100000
 
-// ValidateUDPBandwidth prüft eine optionale UDP-Zielbandbreite. 0 ist nicht
-// erlaubt, da iperf3 das als „unbegrenzt“ auslegt und die Leitung flutet.
-func ValidateUDPBandwidth(v *float64) string {
+// ValidateUDPBandwidth checks an optional UDP target bandwidth. 0 is not
+// allowed: iperf3 takes it as "unlimited" and floods the line.
+func ValidateUDPBandwidth(v *float64) error {
 	if v != nil && (*v <= 0 || *v > MaxUDPBandwidthMbps) {
-		return "UDP-Bandbreite muss größer als 0 und höchstens 100000 Mbit/s sein"
+		return i18n.E("err.input.udp_bandwidth", strconv.Itoa(MaxUDPBandwidthMbps))
 	}
-	return ""
+	return nil
 }
 
 // TestStatus ist der Ausführungsstatus eines Tests.
@@ -165,7 +171,11 @@ type Test struct {
 	StartedAt        *time.Time `json:"started_at"`
 	CompletedAt      *time.Time `json:"completed_at"`
 	TestResult
+	// ErrorMessage is the reason of a failure in English (in older rows
+	// German); the web layer renders it in the request language with
+	// ErrorText, its language-neutral form (i18n.Msg, encoded).
 	ErrorMessage *string   `json:"error_message"`
+	ErrorText    string    `json:"-"`
 	CreatedAt    time.Time `json:"created_at"`
 }
 
@@ -213,24 +223,34 @@ type TraceHop struct {
 	GeoIPInterpolated bool `json:"geoip_interpolated"`
 }
 
+// SetError records err as the reason the trace is incomplete: the English
+// text and its language-neutral form.
+func (t *Trace) SetError(err error) {
+	msg := err.Error()
+	t.ErrorMessage = &msg
+	t.ErrorText = i18n.MsgOf(err).Encode()
+}
+
 // HasLocation meldet, ob der Hop Koordinaten hat.
 func (h TraceHop) HasLocation() bool { return h.Latitude != nil && h.Longitude != nil }
 
 // Trace ist eine Routenverfolgung, optional zu einem Test.
 type Trace struct {
-	ID              int64      `json:"id"`
-	TestID          *int64     `json:"test_id"`
-	SourceIP        *string    `json:"source_ip"`
-	DestinationIP   *string    `json:"destination_ip"`
-	DestinationHost string     `json:"destination_host"`
-	TotalHops       int        `json:"total_hops"`
-	TotalRTTMs      *float64   `json:"total_rtt_ms"`
-	Completed       bool       `json:"completed"`
-	ErrorMessage    *string    `json:"error_message"`
-	StartedAt       *time.Time `json:"started_at"`
-	CompletedAt     *time.Time `json:"completed_at"`
-	CreatedAt       time.Time  `json:"created_at"`
-	Hops            []TraceHop `json:"hops"`
+	ID              int64    `json:"id"`
+	TestID          *int64   `json:"test_id"`
+	SourceIP        *string  `json:"source_ip"`
+	DestinationIP   *string  `json:"destination_ip"`
+	DestinationHost string   `json:"destination_host"`
+	TotalHops       int      `json:"total_hops"`
+	TotalRTTMs      *float64 `json:"total_rtt_ms"`
+	Completed       bool     `json:"completed"`
+	// ErrorMessage and ErrorText as in Test.
+	ErrorMessage *string    `json:"error_message"`
+	ErrorText    string     `json:"-"`
+	StartedAt    *time.Time `json:"started_at"`
+	CompletedAt  *time.Time `json:"completed_at"`
+	CreatedAt    time.Time  `json:"created_at"`
+	Hops         []TraceHop `json:"hops"`
 }
 
 // DashboardStats sind die Kennzahlen der Übersicht.

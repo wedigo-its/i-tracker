@@ -11,13 +11,15 @@ import (
 	"runtime"
 	"strconv"
 	"time"
+
+	"i-tracker/internal/i18n"
 )
 
 // Mindestversion für --json-stream.
 const minMajor, minMinor = 3, 17
 
 // ErrNotInstalled meldet, dass keine ausführbare iperf3-Binary gefunden wurde.
-var ErrNotInstalled = errors.New("iperf3 nicht installiert")
+var ErrNotInstalled = i18n.E("err.iperf.not_installed")
 
 // FindBinary liefert den Pfad zu iperf3: den konfigurierten Pfad, sonst die
 // Suche im PATH, unter Windows zusätzlich die Ablageorte von winget (Benutzer-
@@ -65,17 +67,17 @@ func CheckVersion(binary string) (string, error) {
 		return "", ErrNotInstalled
 	}
 	if err != nil {
-		return "", fmt.Errorf("iperf3 nicht ausführbar (%s): %w", binary, err)
+		return "", i18n.Wrap(err, "err.iperf.not_executable", binary)
 	}
 	m := versionRe.FindStringSubmatch(string(out))
 	if m == nil {
-		return "", fmt.Errorf("iperf3-Version nicht erkennbar")
+		return "", i18n.E("err.iperf.version_unknown")
 	}
 	major, _ := strconv.Atoi(m[1])
 	minor, _ := strconv.Atoi(m[2])
 	version := m[1] + "." + m[2]
 	if major < minMajor || (major == minMajor && minor < minMinor) {
-		return version, fmt.Errorf("iperf3 %s ist zu alt – benötigt wird mindestens %d.%d (--json-stream)", version, minMajor, minMinor)
+		return version, i18n.E("err.iperf.too_old", version, fmt.Sprintf("%d.%d", minMajor, minMinor))
 	}
 	return version, nil
 }

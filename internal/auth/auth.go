@@ -47,7 +47,7 @@ const MaxPasswordBytes = 256
 const MinPasswordLength = 8
 
 // ErrInvalidToken wird für fehlerhafte, abgelaufene oder fremd signierte Tokens geliefert.
-var ErrInvalidToken = errors.New("ungültiges Token")
+var ErrInvalidToken = errors.New("invalid token")
 
 // Argon2id-Parameter nach RFC 9106, Abschnitt 4 (zweite Empfehlung):
 // 64 MiB Speicher, 3 Durchläufe, 4 Threads.
@@ -127,11 +127,11 @@ func parseArgon2id(hash string) (argonParams, error) {
 	parts := strings.Split(hash, "$")
 	// "", "argon2id", "v=19", "m=…,t=…,p=…", salt, key
 	if len(parts) != 6 || parts[1] != "argon2id" {
-		return p, errors.New("kein Argon2id-Hash")
+		return p, errors.New("not an Argon2id hash")
 	}
 	var version int
 	if _, err := fmt.Sscanf(parts[2], "v=%d", &version); err != nil || version != argon2.Version {
-		return p, errors.New("Argon2-Version nicht unterstützt")
+		return p, errors.New("Argon2 version not supported")
 	}
 	if _, err := fmt.Sscanf(parts[3], "m=%d,t=%d,p=%d", &p.memory, &p.time, &p.threads); err != nil {
 		return p, err
@@ -144,7 +144,7 @@ func parseArgon2id(hash string) (argonParams, error) {
 		return p, err
 	}
 	if p.time == 0 || p.threads == 0 || len(p.key) == 0 {
-		return p, errors.New("ungültige Argon2id-Parameter")
+		return p, errors.New("invalid Argon2id parameters")
 	}
 	return p, nil
 }
@@ -159,7 +159,7 @@ func GeneratePassword() string {
 	buf := make([]byte, 1)
 	for i := 0; i < n; {
 		if _, err := rand.Read(buf); err != nil {
-			panic("Zufallsgenerator nicht verfügbar: " + err.Error())
+			panic("random number generator not available: " + err.Error())
 		}
 		// Verwerfen statt Modulo, damit alle Zeichen gleich wahrscheinlich sind.
 		if int(buf[0]) >= 256-256%len(passwordAlphabet) {

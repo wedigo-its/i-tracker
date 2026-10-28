@@ -65,20 +65,22 @@ func (s *Server) handleLiveTrace(w http.ResponseWriter, r *http.Request) {
 	destination := r.PathValue("destination")
 	stream := newSSEStream(w)
 	lang := i18n.FromRequest(r)
-	fail := func(msg string) {
-		stream.send(map[string]string{"type": "error", "message": i18n.Translate(msg, lang)})
+	// fail sends err as an error event, in the request language; code is its
+	// catalog key, as in error responses.
+	fail := func(err error) {
+		stream.send(map[string]string{"type": "error", "message": i18n.ErrorIn(lang, err), "code": i18n.KeyOf(err)})
 	}
 
 	if _, _, err := s.userForRequest(r, false); err != nil {
 		if !errors.Is(err, errUnauthorized) && !errors.Is(err, errInactive) && !errors.Is(err, errMustChangePass) {
-			slog.Error("Live-Trace: Anmeldung nicht prüfbar", "error", err)
-			err = errors.New("Interner Serverfehler")
+			slog.Error("Live trace: sign-in could not be checked", "error", err)
+			err = i18n.E("err.internal")
 		}
-		fail(err.Error())
+		fail(err)
 		return
 	}
 	if n := utf8.RuneCountInString(destination); n < 1 || n > 255 {
-		fail("Ziel muss 1–255 Zeichen lang sein")
+		fail(i18n.E("err.trace.destination_length"))
 		return
 	}
 
@@ -106,19 +108,20 @@ func (s *Server) handleLiveTrace(w http.ResponseWriter, r *http.Request) {
 	})
 
 	if ctx.Err() != nil {
-		slog.Info("Live-Trace vom Client abgebrochen", "destination", destination)
+		slog.Info("Live trace cancelled by the client", "destination", destination)
 		return
 	}
 	if len(tr.Hops) == 0 && tr.ErrorMessage != nil {
-		fail(*tr.ErrorMessage)
+		stream.send(map[string]string{"type": "error", "message": i18n.Localize(lang, tr.ErrorText, *tr.ErrorMessage),
+			"code": i18n.StoredKey(tr.ErrorText, *tr.ErrorMessage)})
 		return
 	}
 	stream.send(map[string]any{"type": "interpolation_complete", "hops": tr.Hops})
 
 	// Speichern vor "complete": Die Oberfläche lädt danach die Historie neu.
 	if err := s.store.CreateTrace(context.WithoutCancel(ctx), tr); err != nil {
-		slog.Error("Live-Trace konnte nicht gespeichert werden", "destination", destination, "error", err)
-		fail("Trace konnte nicht gespeichert werden")
+		slog.Error("Live trace could not be saved", "destination", destination, "error", err)
+		fail(i18n.E("err.trace.save_failed"))
 		return
 	}
 	stream.send(map[string]any{"type": "complete", "trace_id": tr.ID})

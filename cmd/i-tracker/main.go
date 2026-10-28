@@ -1,10 +1,10 @@
-// Command i-tracker führt zeit- und benutzergesteuerte iperf3-Tests aus,
-// speichert die Ergebnisse in SQLite und stellt API und Oberfläche über HTTP bereit.
+// Command i-tracker runs scheduled and user-started iperf3 tests, stores the
+// results in SQLite and serves the API and web interface over HTTP.
 //
-// Aufruf:
+// Usage:
 //
 //	i-tracker [-config config.yaml] [-version] [-no-tui]
-//	i-tracker service install|uninstall|start|stop|restart|status [-config pfad]
+//	i-tracker service install|uninstall|start|stop|restart|status [-config path]
 package main
 
 import (
@@ -29,6 +29,7 @@ import (
 	"i-tracker/internal/auth"
 	"i-tracker/internal/config"
 	"i-tracker/internal/db"
+	"i-tracker/internal/i18n"
 	"i-tracker/internal/iperf"
 	"i-tracker/internal/scheduler"
 	"i-tracker/internal/store"
@@ -43,7 +44,7 @@ func main() {
 		switch os.Args[1] {
 		case "service-run":
 			if err := runService(os.Args[2:]); err != nil {
-				fmt.Fprintln(os.Stderr, "Dienstfehler:", err)
+				fmt.Fprintln(os.Stderr, "Service error:", err)
 				os.Exit(1)
 			}
 			return
@@ -51,7 +52,7 @@ func main() {
 			handleServiceCommand(os.Args[2:])
 			return
 		case "reference":
-			// Referenz für die Produktdokumentation (www.wedigo.net/docs/i-tracker), nicht in der Hilfe.
+			// Reference for the product documentation (www.wedigo.net/docs/i-tracker), not listed in the help.
 			if err := writeReference(os.Stdout); err != nil {
 				fmt.Fprintln(os.Stderr, "reference:", err)
 				os.Exit(1)
@@ -76,7 +77,7 @@ func main() {
 		close(stop)
 	}()
 	if err := run(*cfgPath, os.Stderr, stop); err != nil {
-		fmt.Fprintln(os.Stderr, "Fehler:", err)
+		fmt.Fprintln(os.Stderr, "Error:", err)
 		os.Exit(1)
 	}
 }
@@ -111,13 +112,13 @@ func run(cfgPath string, logOut io.Writer, stop <-chan struct{}) error {
 
 	slog.SetDefault(newLogger(logOut, cfg.Log))
 	if created {
-		slog.Info("Neue Konfiguration erstellt", "path", cfgPath)
+		slog.Info("New configuration created", "path", cfgPath)
 	}
 	for _, w := range cfg.Warnings {
 		slog.Warn(w)
 	}
 	if cfg.Auth.SecretGenerated {
-		slog.Warn("auth.secret_key nicht gesetzt – temporärer Schlüssel erzeugt, Anmeldungen werden beim Neustart ungültig")
+		slog.Warn("auth.secret_key not set: temporary key generated, sign-ins become invalid on restart")
 	}
 
 	// --- Datenbank ---
@@ -127,31 +128,31 @@ func run(cfgPath string, logOut io.Writer, stop <-chan struct{}) error {
 	}
 	defer conn.Close()
 	st := store.New(conn)
-	slog.Info("Datenbank geöffnet", "path", cfg.Storage.Path)
+	slog.Info("Database opened", "path", cfg.Storage.Path)
 
 	if !svc.Interactive() {
-		// Im Dienstbetrieb sieht niemand die Konsole: das Startpasswort
-		// zusätzlich neben die Konfiguration schreiben.
+		// As a service nobody sees the console: also write the initial
+		// password next to the configuration.
 		web.InitialPasswordHook = func(username, password string) {
 			p := filepath.Join(cfg.Dir, "initial-admin-password.txt")
-			text := fmt.Sprintf("Benutzer: %s\nPasswort: %s\n\nDas Passwort muss bei der ersten Anmeldung geändert werden.\nDiese Datei danach löschen.\n", username, password)
+			text := fmt.Sprintf("User: %s\nPassword: %s\n\nThe password must be changed at the first sign-in.\nDelete this file afterwards.\n", username, password)
 			if err := os.WriteFile(p, []byte(text), 0o600); err != nil {
-				slog.Error("Startpasswort konnte nicht gespeichert werden", "path", p, "error", err)
+				slog.Error("Initial password could not be saved", "path", p, "error", err)
 				return
 			}
-			slog.Warn("Startpasswort zusätzlich gespeichert", "path", p)
+			slog.Warn("Initial password also saved to a file", "path", p)
 		}
 	}
 	if _, err := web.EnsureAdmin(context.Background(), st); err != nil {
 		return err
 	}
 	if err := web.FlagLegacyDefaultPassword(context.Background(), st); err != nil {
-		return fmt.Errorf("Admin-Konto konnte nicht geprüft werden: %w", err)
+		return fmt.Errorf("admin account could not be checked: %w", err)
 	}
-	if n, err := st.FailUnfinishedTests(context.Background(), "Abgebrochen: Dienst wurde neu gestartet"); err != nil {
-		return fmt.Errorf("Offene Tests konnten nicht bereinigt werden: %w", err)
+	if n, err := st.FailUnfinishedTests(context.Background(), i18n.E("err.test.aborted_restart")); err != nil {
+		return fmt.Errorf("unfinished tests could not be cleaned up: %w", err)
 	} else if n > 0 {
-		slog.Warn("Unterbrochene Tests als fehlgeschlagen markiert", "count", n)
+		slog.Warn("Interrupted tests marked as failed", "count", n)
 	}
 
 	// --- iperf3 ---
@@ -166,11 +167,11 @@ func run(cfgPath string, logOut io.Writer, stop <-chan struct{}) error {
 	defer geo.Close()
 	switch p, err := geo.Load(cfg.GeoIP.Path, filepath.Join(cfg.Dir, "geoip", "GeoLite2-City.mmdb"), "/var/lib/GeoIP/GeoLite2-City.mmdb"); {
 	case err == nil:
-		slog.Info("GeoIP-Datenbank geladen", "path", p)
+		slog.Info("GeoIP database loaded", "path", p)
 	case !errors.Is(err, os.ErrNotExist):
-		slog.Warn("GeoIP-Datenbank konnte nicht geöffnet werden", "path", p, "error", err)
+		slog.Warn("GeoIP database could not be opened", "path", p, "error", err)
 	case !cfg.GeoIP.AutoUpdate:
-		slog.Warn("GeoIP-Datenbank nicht vorhanden – Traces ohne Standorte", "path", cfg.GeoIP.Path)
+		slog.Warn("GeoIP database missing, traces without locations", "path", cfg.GeoIP.Path)
 	}
 	var geoUpdater *trace.GeoUpdater
 	if cfg.GeoIP.AutoUpdate {
@@ -191,19 +192,19 @@ func run(cfgPath string, logOut io.Writer, stop <-chan struct{}) error {
 	sched := scheduler.New(st, runner, tracer)
 	if cfg.Scheduler.Enabled {
 		if err := sched.Start(context.Background()); err != nil {
-			return fmt.Errorf("Scheduler konnte nicht gestartet werden: %w", err)
+			return fmt.Errorf("scheduler could not be started: %w", err)
 		}
 		defer sched.Stop()
 	} else {
-		slog.Info("Scheduler per Konfiguration deaktiviert")
+		slog.Info("Scheduler disabled by configuration")
 	}
 
 	// --- HTTP-Server ---
 	if cfg.Map.TileURL != "" {
-		slog.Info("Peering-Map nutzt Kachelserver", "tile_url", cfg.Map.TileURL)
+		slog.Info("Peering map uses a tile server", "tile_url", cfg.Map.TileURL)
 	}
 	if cfg.Auth.PublicRead {
-		slog.Info("Leseansicht ohne Anmeldung aktiv (auth.public_read)")
+		slog.Info("Read-only view without sign-in enabled (auth.public_read)")
 	}
 	// Gültigkeit ist bereits in config.validate geprüft.
 	sessionTTL, _ := cfg.Auth.SessionDuration()
@@ -231,25 +232,25 @@ func run(cfgPath string, logOut io.Writer, stop <-chan struct{}) error {
 	}
 	ln, err := net.Listen("tcp", cfg.Web.Listen)
 	if err != nil {
-		return fmt.Errorf("HTTP-Server: %w", err)
+		return fmt.Errorf("HTTP server: %w", err)
 	}
 	errCh := make(chan error, 1)
 	go func() { errCh <- srv.Serve(ln) }()
-	slog.Info(version.Name+" läuft", "address", cfg.Web.Listen, "version", version.Version, "build", version.BuildDate)
+	slog.Info(version.Name+" running", "address", cfg.Web.Listen, "version", version.Version, "build", version.BuildDate)
 	if host, port, err := net.SplitHostPort(cfg.Web.Listen); err == nil {
 		if host == "" || host == "0.0.0.0" || host == "::" {
 			host = "localhost"
 		}
-		slog.Info("Oberfläche: http://" + net.JoinHostPort(host, port))
+		slog.Info("Web interface: http://" + net.JoinHostPort(host, port))
 	}
 
 	select {
 	case err := <-errCh:
 		if !errors.Is(err, http.ErrServerClosed) {
-			return fmt.Errorf("HTTP-Server: %w", err)
+			return fmt.Errorf("HTTP server: %w", err)
 		}
 	case <-stop:
-		slog.Info("Beende …")
+		slog.Info("Shutting down")
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -273,8 +274,8 @@ func (p *program) Start(service.Service) error {
 	go func() {
 		defer close(p.done)
 		if err := run(p.cfgPath, p.logOut, p.stop); err != nil {
-			slog.Error("Dienst beendet", "error", err)
-			fmt.Fprintln(p.logOut, "Fehler:", err)
+			slog.Error("Service stopped", "error", err)
+			fmt.Fprintln(p.logOut, "Error:", err)
 			os.Exit(1)
 		}
 	}()
@@ -293,7 +294,7 @@ func (p *program) Stop(service.Service) error {
 // runService läuft unter dem Dienstmanager (Argument "service-run").
 func runService(args []string) error {
 	fs := flag.NewFlagSet("service-run", flag.ContinueOnError)
-	cfgPath := fs.String("config", "", "Pfad zur Konfigurationsdatei")
+	cfgPath := fs.String("config", "", "path to the configuration file")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -334,9 +335,9 @@ func serviceConfigPath(p string) (string, error) {
 
 // defineFlags legt die Optionen des Hauptprogramms an (auch für die Produktdokumentation).
 func defineFlags(fs *flag.FlagSet) (cfgPath *string, showVersion *bool) {
-	cfgPath = fs.String("config", "config.yaml", "Pfad zur Konfigurationsdatei")
-	showVersion = fs.Bool("version", false, "Version ausgeben und beenden")
-	fs.Bool("no-tui", false, "Ohne Terminal-Oberfläche starten (ohne Wirkung: der i-Tracker hat keine TUI)")
+	cfgPath = fs.String("config", "config.yaml", "path to the configuration file")
+	showVersion = fs.Bool("version", false, "print the version and exit")
+	fs.Bool("no-tui", false, "start without terminal UI (no effect: i-Tracker has no TUI)")
 	return
 }
 
@@ -345,10 +346,10 @@ var serviceActions = []string{"install", "uninstall", "start", "stop", "restart"
 
 // handleServiceCommand verarbeitet
 //
-//	i-tracker service install|uninstall|start|stop|restart|status [-config pfad]
+//	i-tracker service install|uninstall|start|stop|restart|status [-config path]
 func handleServiceCommand(args []string) {
 	usage := func() {
-		fmt.Printf("Verwendung: i-tracker service <%s> [-config pfad]\n", strings.Join(serviceActions, "|"))
+		fmt.Printf("Usage: i-tracker service <%s> [-config path]\n", strings.Join(serviceActions, "|"))
 		os.Exit(2)
 	}
 	if len(args) == 0 {
@@ -356,7 +357,7 @@ func handleServiceCommand(args []string) {
 	}
 	cmd := args[0]
 	fs := flag.NewFlagSet("service", flag.ExitOnError)
-	cfgFlag := fs.String("config", "", "Pfad zur Konfigurationsdatei (Standard: config.yaml neben der Binary)")
+	cfgFlag := fs.String("config", "", "path to the configuration file (default: config.yaml next to the binary)")
 	_ = fs.Parse(args[1:])
 
 	var err error
@@ -365,7 +366,7 @@ func handleServiceCommand(args []string) {
 		var path string
 		if path, err = serviceConfigPath(*cfgFlag); err == nil {
 			if err = svc.Install(path); err == nil {
-				fmt.Printf("Dienst %q installiert (%s), Konfiguration: %s\n", svc.Name, svc.Platform(), path)
+				fmt.Printf("Service %q installed (%s), configuration: %s\n", svc.Name, svc.Platform(), path)
 			}
 		}
 	case "uninstall":
@@ -379,16 +380,16 @@ func handleServiceCommand(args []string) {
 	case "status":
 		var st string
 		if st, err = svc.Status(); err == nil {
-			fmt.Println("Dienststatus:", st)
+			fmt.Println("Service status:", st)
 		}
 	default:
 		usage()
 	}
 	if err != nil {
-		fmt.Fprintln(os.Stderr, "Dienstfehler:", err)
+		fmt.Fprintln(os.Stderr, "Service error:", err)
 		os.Exit(1)
 	}
 	if cmd != "status" && cmd != "install" {
-		fmt.Printf("Dienst-Aktion '%s' erfolgreich.\n", cmd)
+		fmt.Printf("Service action '%s' succeeded.\n", cmd)
 	}
 }

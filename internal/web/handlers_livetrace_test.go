@@ -40,6 +40,7 @@ type sseEvent struct {
 	Type        string           `json:"type"`
 	Destination string           `json:"destination"`
 	Message     string           `json:"message"`
+	Code        *string          `json:"code"`
 	Data        model.TraceHop   `json:"data"`
 	Hops        []model.TraceHop `json:"hops"`
 	TraceID     int64            `json:"trace_id"`
@@ -121,13 +122,18 @@ func TestLiveTraceErrors(t *testing.T) {
 	tok := login(t, srv, "admin", "admin123")
 
 	// Ungültiges Token: error-Event statt HTTP-Fehler (EventSource sieht keinen Status).
-	if events := readSSE(t, srv, "127.0.0.1", "kaputt"); eventTypes(events) != "error" || events[0].Message == "" {
+	if events := readSSE(t, srv, "127.0.0.1", "kaputt"); eventTypes(events) != "error" || events[0].Message == "" ||
+		events[0].Code == nil || *events[0].Code != "err.auth.unauthorized" {
 		t.Errorf("ohne gültiges Token: %+v", events)
 	}
 	// Ohne traceroute-Binary und ohne Hops: start, dann error; nichts gespeichert.
+	// The error stored with the trace carries its catalog key as code, like
+	// every other error event.
 	events := readSSE(t, srv, "127.0.0.1", tok)
 	if eventTypes(events) != "start,error" || !strings.Contains(events[1].Message, "nicht gefunden") {
 		t.Errorf("ohne Werkzeug: %+v", events)
+	} else if events[1].Code == nil || *events[1].Code != "err.trace.tool_missing" {
+		t.Errorf("ohne Werkzeug: code %v, want err.trace.tool_missing", events[1].Code)
 	}
 	var list []model.Trace
 	if call(t, srv, "GET", "/api/traces", tok, "", &list); len(list) != 0 {

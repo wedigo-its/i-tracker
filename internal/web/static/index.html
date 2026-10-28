@@ -99,7 +99,7 @@
         <!-- Benutzermenü mit Einstellungen: Kopf mit Benutzername, Abschnitte Sprache und Darstellung, darunter die Konto-Einträge.
              Angemeldet (showApp) erscheinen Benutzername und Konto-Einträge, in der Gastansicht (showGuest) „Gast“ und Anmelden. -->
         <div class="menu-panel user-panel" id="userPanel" hidden>
-          <div class="user-head" data-user-only><span class="user-name" id="userName"></span><span class="badge-type" id="userAdminBadge" hidden>Admin</span></div>
+          <div class="user-head" data-user-only><span class="user-name" id="userName"></span><span class="badge-type" id="userAdminBadge" hidden data-i18n="nav.admin">Admin</span></div>
           <div class="user-head" data-guest-only><span class="user-name" data-i18n="guest.name">Gast</span><span class="sev-badge sev-info" data-i18n="guest.badge">Nur Lesen</span></div>
           <div class="menu-section">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20"/><path d="M2 12h20"/></svg>
@@ -252,7 +252,7 @@
 
     <div class="section" id="pmDetails" hidden>
       <div class="section-head">
-        <div class="section-title" id="pmDetailTitle">Pfad</div>
+        <div class="section-title" id="pmDetailTitle"></div>
         <div id="pmDetailActions"></div>
       </div>
       <div class="ds-card spaced">
@@ -329,8 +329,8 @@
 <div class="modal-backdrop" id="serverModal" hidden data-click="serversPage.closeForm" data-self>
   <form class="modal" id="serverForm" data-submit="serversPage.save" novalidate>
     <div class="modal-head">
-      <h2 id="serverFormTitle">Server hinzufügen</h2>
-      <button type="button" class="icon-btn" aria-label="Schließen" data-i18n-aria="close" data-click="serversPage.closeForm"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6 6 18"
+      <h2 id="serverFormTitle"></h2>
+      <button type="button" class="icon-btn" aria-label="Schließen" data-i18n-aria="close" data-click="serversPage.closeForm"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg></button>
     </div>
     <div class="modal-body">
       <div class="form-error" id="serverFormError" hidden></div>
@@ -372,8 +372,8 @@
 <div class="modal-backdrop" id="testModal" hidden data-click="testsPage.closeDetail" data-self>
   <div class="modal">
     <div class="modal-head">
-      <h2 id="testModalTitle">Test</h2>
-      <button type="button" class="icon-btn" aria-label="Schließen" data-i18n-aria="close" data-click="testsPage.closeDetail"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6 6 18"
+      <h2 id="testModalTitle"></h2>
+      <button type="button" class="icon-btn" aria-label="Schließen" data-i18n-aria="close" data-click="testsPage.closeDetail"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg></button>
     </div>
     <div class="modal-body" id="testModalBody"></div>
     <div class="modal-foot">
@@ -388,7 +388,7 @@
   <form class="modal small" data-submit="adminPage.saveUser" novalidate>
     <div class="modal-head">
       <h2 data-i18n="admin.createUser">Benutzer anlegen</h2>
-      <button type="button" class="icon-btn" aria-label="Schließen" data-i18n-aria="close" data-click="adminPage.closeUserForm"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6 6 18"
+      <button type="button" class="icon-btn" aria-label="Schließen" data-i18n-aria="close" data-click="adminPage.closeUserForm"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg></button>
     </div>
     <div class="modal-body">
       <div class="form-error" id="userFormError" hidden></div>
@@ -409,7 +409,7 @@
   <form class="modal small" data-submit="passwordDialog.save" novalidate>
     <div class="modal-head">
       <h2 data-i18n="user.changePassword">Passwort ändern</h2>
-      <button type="button" class="icon-btn" aria-label="Schließen" data-i18n-aria="close" data-click="passwordDialog.close"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6 6 18"
+      <button type="button" class="icon-btn" aria-label="Schließen" data-i18n-aria="close" data-click="passwordDialog.close"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg></button>
     </div>
     <div class="modal-body">
       <div class="form-error" id="passwordError" hidden></div>
@@ -430,7 +430,7 @@
     <div class="modal-head"><h2 id="confirmTitle"></h2></div>
     <div class="modal-body"><p id="confirmText" class="confirm-text"></p></div>
     <div class="modal-foot">
-      <button type="button" class="btn btn-secondary" id="confirmCancel">Abbrechen</button>
+      <button type="button" class="btn btn-secondary" id="confirmCancel"></button>
       <button type="button" class="btn btn-danger" id="confirmOk"></button>
     </div>
   </div>

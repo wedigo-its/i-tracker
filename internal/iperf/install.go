@@ -3,11 +3,11 @@ package iperf
 import (
 	"bytes"
 	"context"
-	"errors"
-	"fmt"
 	"os"
 	"os/exec"
 	"strings"
+
+	"i-tracker/internal/i18n"
 )
 
 // Paketmanager in der Reihenfolge, in der sie unter Linux gesucht werden.
@@ -32,13 +32,13 @@ func installCommands(goos string, lookPath func(string) (string, error), isRoot 
 	switch goos {
 	case "windows":
 		if !has("winget") {
-			return nil, errors.New("winget ist nicht verfügbar – iperf3 bitte manuell installieren")
+			return nil, i18n.E("err.install.no_winget")
 		}
 		return [][]string{{"winget", "install", "--id", "ar51an.iPerf3", "-e", "--silent",
 			"--accept-package-agreements", "--accept-source-agreements", "--disable-interactivity"}}, nil
 	case "darwin":
 		if !has("brew") {
-			return nil, errors.New("Homebrew ist nicht verfügbar – iperf3 bitte manuell installieren")
+			return nil, i18n.E("err.install.no_brew")
 		}
 		return [][]string{{"brew", "install", "iperf3"}}, nil
 	case "linux":
@@ -50,7 +50,7 @@ func installCommands(goos string, lookPath func(string) (string, error), isRoot 
 				return pm.cmds, nil
 			}
 			if !has("sudo") {
-				return nil, fmt.Errorf("für die Installation über %s sind Root-Rechte nötig, sudo ist nicht verfügbar", pm.tool)
+				return nil, i18n.E("err.install.no_sudo", pm.tool)
 			}
 			cmds := make([][]string, len(pm.cmds))
 			for i, c := range pm.cmds {
@@ -58,9 +58,9 @@ func installCommands(goos string, lookPath func(string) (string, error), isRoot 
 			}
 			return cmds, nil
 		}
-		return nil, errors.New("kein unterstützter Paketmanager gefunden (apt-get, dnf, yum, zypper, apk, pacman)")
+		return nil, i18n.E("err.install.no_package_manager")
 	}
-	return nil, fmt.Errorf("automatische Installation unter %s nicht unterstützt", goos)
+	return nil, i18n.E("err.install.unsupported_os", goos)
 }
 
 // Install installiert iperf3 über den Paketmanager des Systems (Windows:
@@ -76,7 +76,7 @@ func Install(ctx context.Context) error {
 		var out bytes.Buffer
 		cmd.Stdout, cmd.Stderr = &out, &out
 		if err := cmd.Run(); err != nil {
-			return fmt.Errorf("%s: %v – %s", strings.Join(c, " "), err, lastLines(out.String(), 3))
+			return i18n.E("err.install.command", strings.Join(c, " "), err, lastLines(out.String(), 3))
 		}
 	}
 	return nil

@@ -63,6 +63,9 @@ CREATE TABLE IF NOT EXISTS tests (
     retransmits                  INTEGER,
     cpu_percent                  REAL,
     error_message                TEXT,
+    -- Language-neutral form of error_message (catalog key and arguments as JSON),
+    -- NULL when the message has none (text of another program). Same in traces.
+    error_text                   TEXT,
     raw_output                   TEXT,
     created_at                   TEXT    NOT NULL
 );
@@ -80,6 +83,7 @@ CREATE TABLE IF NOT EXISTS traces (
     total_rtt_ms     REAL,
     completed        BOOLEAN NOT NULL DEFAULT 0,
     error_message    TEXT,
+    error_text       TEXT,
     started_at       TEXT,
     completed_at     TEXT,
     created_at       TEXT    NOT NULL
