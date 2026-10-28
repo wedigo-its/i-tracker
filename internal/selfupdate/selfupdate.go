@@ -229,6 +229,8 @@ func replaceExecutable(exe string, data []byte) error {
 
 	backup := exe + ".bak"
 	_ = os.Remove(backup)
+	// A version an automatic rollback set aside is of no use any more.
+	_ = os.Remove(exe + ".failed")
 	// Move the current binary aside (Windows cannot overwrite a running exe, but
 	// it can rename it), then move the new one into place.
 	if err := os.Rename(exe, backup); err != nil {
@@ -259,11 +261,16 @@ func Writable() error {
 }
 
 // Rollback restores the previous binary from its ".bak" backup; the binary it
-// replaces becomes the new backup. It takes effect on the next start.
+// replaces becomes the new backup. It takes effect on the next start. After an
+// automatic rollback there is no backup (see rollbackPending): the previous
+// version is installed already, and the failed one must not come back.
 func Rollback() error {
 	exe, err := executable()
 	if err != nil {
 		return err
+	}
+	if failed := autoRolledBack(exe); failed != "" {
+		return i18n.E("err.update.rolled_back", failed)
 	}
 	if err := restoreBackup(exe); err != nil {
 		return err
@@ -273,10 +280,28 @@ func Rollback() error {
 	return nil
 }
 
-// restoreBackup swaps exe with exe.bak. It only renames and never overwrites:
-// Windows refuses to replace an executable that is running (Rollback itself
-// runs from it) but allows renaming it.
-func restoreBackup(exe string) error {
+// autoRolledBack returns the version an automatic rollback set aside as
+// exe.failed when no backup is left, or "".
+func autoRolledBack(exe string) string {
+	if _, err := os.Stat(exe + ".bak"); err == nil {
+		return ""
+	}
+	if _, err := os.Stat(exe + ".failed"); err != nil {
+		return ""
+	}
+	return skipped()
+}
+
+// restoreBackup swaps exe with exe.bak (manual rollback).
+func restoreBackup(exe string) error { return replaceWithBackup(exe, exe+".bak") }
+
+// replaceWithBackup moves exe.bak into place of exe and the replaced binary
+// to keep: exe.bak for a manual rollback, exe.failed for an automatic one, so
+// a failed version never becomes the backup a later manual rollback restores.
+// It only renames and never overwrites: Windows refuses to replace an
+// executable that is running (Rollback itself runs from it) but allows
+// renaming it.
+func replaceWithBackup(exe, keep string) error {
 	backup := exe + ".bak"
 	if _, err := os.Stat(backup); err != nil {
 		return i18n.E("err.update.no_backup")
@@ -290,7 +315,10 @@ func restoreBackup(exe string) error {
 		_ = os.Rename(aside, exe)
 		return i18n.Wrap(err, "err.update.restore")
 	}
-	if err := os.Rename(aside, backup); err != nil {
+	if keep != backup {
+		_ = os.Remove(keep)
+	}
+	if err := os.Rename(aside, keep); err != nil {
 		return i18n.Wrap(err, "err.update.restore_partial", aside)
 	}
 	return nil

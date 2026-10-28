@@ -158,7 +158,7 @@ docker compose up -d --build
 
 ### Back to the previous version
 
-i-Tracker keeps the previous version. If a new version does not start properly, it goes back to the old one by itself. You can also do this by hand:
+i-Tracker keeps the previous version. If a new version does not start properly, it goes back to the old one by itself. The failed version is then set aside, so `rollback` cannot bring it back: it reports that the previous version is already installed. You can also go back by hand:
 
 ```windows
 .\i-tracker.exe rollback

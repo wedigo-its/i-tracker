@@ -7,6 +7,7 @@ package selfupdate
 import (
 	"context"
 	"os"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -91,6 +92,10 @@ func TestRecoverRollsBackAfterFailedStarts(t *testing.T) {
 	if err != nil || !rec.RolledBack || rec.From != "1.0.0" || rec.To != "1.1.0" {
 		t.Fatalf("Recover = %+v, %v; want a rollback to 1.0.0", rec, err)
 	}
+	// The service logs Attempt-1 as the number of failed starts.
+	if rec.Attempt-1 != MaxStartAttempts {
+		t.Fatalf("Attempt = %d on rollback, want %d (start after %d failed ones)", rec.Attempt, MaxStartAttempts+1, MaxStartAttempts)
+	}
 	if got := readFile(t, exe); got != "old" {
 		t.Fatalf("executable = %q after rollback, want the previous binary", got)
 	}
@@ -100,6 +105,75 @@ func TestRecoverRollsBackAfterFailedStarts(t *testing.T) {
 	// The restored binary starts without anything left to watch.
 	if rec, err := Recover("1.0.0"); err != nil || rec.Attempt != 0 || rec.RolledBack {
 		t.Fatalf("Recover after rollback = %+v, %v", rec, err)
+	}
+}
+
+// After an automatic rollback a manual one must not put the failed version
+// back: nothing pending would roll it back again, so the service would
+// crash-loop. The automatic rollback keeps no backup, and Rollback refuses.
+func TestManualRollbackAfterAutomaticRollback(t *testing.T) {
+	cases := map[string]func() (Recovery, error){
+		"crashing starts": func() (Recovery, error) {
+			for range MaxStartAttempts {
+				if _, err := Recover("1.1.0"); err != nil {
+					return Recovery{}, err
+				}
+			}
+			return Recover("1.1.0")
+		},
+		"failed start": func() (Recovery, error) { return AbortPending("1.1.0") },
+	}
+	for name, fail := range cases {
+		t.Run(name, func(t *testing.T) {
+			exe := useExecutable(t, "new")
+			writeFile(t, exe+".bak", "old")
+			if err := markPending("1.0.0", "1.1.0"); err != nil {
+				t.Fatal(err)
+			}
+			if rec, err := fail(); err != nil || !rec.RolledBack {
+				t.Fatalf("automatic rollback = %+v, %v", rec, err)
+			}
+			if _, err := os.Stat(exe + ".bak"); !os.IsNotExist(err) {
+				t.Fatalf("backup after the automatic rollback (%v); it holds the failed version", err)
+			}
+			if got := readFile(t, exe+".failed"); got != "new" {
+				t.Fatalf("%s.failed = %q, want the failed version", exe, got)
+			}
+			// The restored version starts, then an admin asks for a rollback.
+			if _, err := Recover("1.0.0"); err != nil {
+				t.Fatal(err)
+			}
+			err := Rollback()
+			if err == nil || !strings.Contains(err.Error(), "1.1.0") || !strings.Contains(err.Error(), "rolled back automatically") {
+				t.Fatalf("Rollback = %v, want a refusal naming 1.1.0", err)
+			}
+			if got := readFile(t, exe); got != "old" {
+				t.Fatalf("executable = %q after the refused rollback, want the restored version", got)
+			}
+
+			// The next update drops the failed binary and makes a backup again,
+			// which a manual rollback restores as usual.
+			if err := replaceExecutable(exe, []byte("newer")); err != nil {
+				t.Fatal(err)
+			}
+			if _, err := os.Stat(exe + ".failed"); !os.IsNotExist(err) {
+				t.Fatalf("failed version left behind by the next update (%v)", err)
+			}
+			if err := Rollback(); err != nil {
+				t.Fatalf("Rollback after the next update: %v", err)
+			}
+			if got := readFile(t, exe); got != "old" {
+				t.Fatalf("executable = %q, want the version before the update", got)
+			}
+		})
+	}
+}
+
+// Without a backup and nothing rolled back, Rollback reports just that.
+func TestRollbackWithoutBackup(t *testing.T) {
+	useExecutable(t, "current")
+	if err := Rollback(); err == nil || !strings.Contains(err.Error(), "no backup") {
+		t.Fatalf("Rollback = %v, want no backup", err)
 	}
 }
 

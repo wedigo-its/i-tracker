@@ -15,8 +15,12 @@
 .DS_Store
 Thumbs.db
 
-# Local agent pointer; internal instructions live in ../_docs
+# Local secrets
+.env
+
+# Local agent pointer and configuration; internal instructions live in ../_docs
 /CLAUDE.md
+.claude/
 
 # GeoLite2 databases are licensed by MaxMind and must not be redistributed here
 /geoip/*.mmdb

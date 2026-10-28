@@ -115,6 +115,8 @@ type Recovery struct {
 	// the service manager starts the restored one.
 	RolledBack bool
 	// Attempt is the start attempt of a pending update (0 when none is pending).
+	// A rollback by Recover happens on start MaxStartAttempts+1, after
+	// Attempt-1 starts that did not run healthy.
 	Attempt int
 	From    string
 	To      string
@@ -140,10 +142,10 @@ func Recover(current string) (Recovery, error) {
 		return Recovery{}, saveState(path, st)
 	}
 	p.Attempts++
+	st.Pending = &p
 	if p.Attempts > MaxStartAttempts {
 		return rollbackPending(path, st)
 	}
-	st.Pending = &p
 	return Recovery{Attempt: p.Attempts, From: p.From, To: p.To}, saveState(path, st)
 }
 
@@ -158,13 +160,16 @@ func AbortPending(current string) (Recovery, error) {
 	return rollbackPending(path, st)
 }
 
+// rollbackPending restores the backup and sets the failed version aside as
+// <exe>.failed rather than as the new backup: a later manual rollback must
+// not reinstall it, as no pending update would roll it back again.
 func rollbackPending(path string, st state) (Recovery, error) {
 	p := *st.Pending
 	exe, err := executable()
 	if err != nil {
 		return Recovery{}, err
 	}
-	if err := restoreBackup(exe); err != nil {
+	if err := replaceWithBackup(exe, exe+".failed"); err != nil {
 		return Recovery{}, i18n.Wrap(err, "err.update.rollback", p.To, p.From)
 	}
 	st.Pending = nil

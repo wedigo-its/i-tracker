@@ -254,7 +254,9 @@ from 0.x to 1.x is an ordinary update.
   Linux). A new version that fails to start, or crashes three times before
   running healthy for two minutes, is rolled back automatically and not
   installed again. `i-tracker rollback` restores the previous version by hand;
-  restart the service afterwards.
+  restart the service afterwards. An automatic rollback keeps the failed binary
+  as `i-tracker.exe.failed`, not as the backup, so a manual rollback afterwards
+  refuses instead of reinstalling it.
 
 ## Development
 

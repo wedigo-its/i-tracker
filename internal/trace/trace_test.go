@@ -40,18 +40,18 @@ func rtt(h rawHop) float64 {
 }
 
 func TestParseTracertWindows(t *testing.T) {
-	// Real `tracert -d` output from German Windows (code page 850).
+	// Real `tracert -d` output from German Windows (code page 850), addresses anonymized.
 	hops := parseFixture(t, "tracert_windows_de.txt")
 	if len(hops) != 10 {
 		t.Fatalf("%d hops, want 10", len(hops))
 	}
-	if hops[0].IP != "10.10.80.1" || rtt(hops[0]) != 1 {
+	if hops[0].IP != "192.168.1.1" || rtt(hops[0]) != 1 {
 		t.Errorf("hop 1 (<1 ms): %+v rtt=%v", hops[0], rtt(hops[0]))
 	}
 	if hops[1].Number != 2 || hops[1].IP != "" || hops[1].RTTMs != nil {
 		t.Errorf("hop 2 (timeout): %+v", hops[1])
 	}
-	if hops[4].IP != "188.111.129.216" || rtt(hops[4]) != 2.33 {
+	if hops[4].IP != "203.0.113.216" || rtt(hops[4]) != 2.33 {
 		t.Errorf("hop 5: %+v rtt=%v", hops[4], rtt(hops[4]))
 	}
 	if last := hops[9]; last.Number != 10 || last.IP != "8.8.8.8" {
@@ -64,18 +64,18 @@ func TestParseTracerouteLinux(t *testing.T) {
 	if len(hops) != 6 {
 		t.Fatalf("%d hops, want 6", len(hops))
 	}
-	if hops[0].IP != "10.10.80.1" || rtt(hops[0]) != 0.39 {
+	if hops[0].IP != "192.168.1.1" || rtt(hops[0]) != 0.39 {
 		t.Errorf("hop 1: %+v rtt=%v", hops[0], rtt(hops[0]))
 	}
 	if hops[1].IP != "" {
 		t.Errorf("hop 2 (* * *): %+v", hops[1])
 	}
 	// A partial timeout counts as answered.
-	if hops[2].IP != "92.79.253.252" || rtt(hops[2]) != 2.21 {
+	if hops[2].IP != "198.51.100.252" || rtt(hops[2]) != 2.21 {
 		t.Errorf("hop 3 (partial timeout): %+v rtt=%v", hops[2], rtt(hops[2]))
 	}
 	// Load balancing: first address wins, RTT over all probes.
-	if hops[3].IP != "88.79.26.24" || rtt(hops[3]) != 2.6 {
+	if hops[3].IP != "203.0.113.24" || rtt(hops[3]) != 2.6 {
 		t.Errorf("hop 4 (two addresses): %+v rtt=%v", hops[3], rtt(hops[3]))
 	}
 }
@@ -223,7 +223,7 @@ func TestGeoIPLookup(t *testing.T) {
 	if loc := geo.Lookup("8.8.8.8"); loc == nil || loc.CountryCode != "US" {
 		t.Errorf("8.8.8.8: %+v", loc)
 	}
-	if loc := geo.Lookup("10.10.80.1"); loc != nil {
+	if loc := geo.Lookup("192.168.1.1"); loc != nil {
 		t.Errorf("private address must have no location: %+v", loc)
 	}
 }

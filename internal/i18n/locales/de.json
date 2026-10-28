@@ -125,6 +125,7 @@
   "err.update.backup": "Laufende Programmdatei konnte nicht gesichert werden: %s",
   "err.update.install_binary": "Neue Programmdatei konnte nicht eingesetzt werden: %s",
   "err.update.no_backup": "Keine Sicherung zum Zurücksetzen vorhanden",
+  "err.update.rolled_back": "Nichts zurückzusetzen: Version %s ist fehlgeschlagen und wurde bereits automatisch zurückgesetzt, die vorige Version ist installiert",
   "err.update.move_aside": "Laufende Programmdatei konnte nicht beiseitegelegt werden: %s",
   "err.update.restore": "Sicherung konnte nicht wiederhergestellt werden: %s",
   "err.update.restore_partial": "Vorige Version wiederhergestellt, die ersetzte Programmdatei liegt aber noch unter %s: %s",

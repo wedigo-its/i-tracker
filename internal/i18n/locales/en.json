@@ -125,6 +125,7 @@
   "err.update.backup": "Could not back up the current program file: %s",
   "err.update.install_binary": "Could not put the new program file in place: %s",
   "err.update.no_backup": "There is no backup to roll back to",
+  "err.update.rolled_back": "Nothing to roll back: version %s failed and was already rolled back automatically, the previous version is installed",
   "err.update.move_aside": "Could not move the current program file aside: %s",
   "err.update.restore": "Could not restore the backup: %s",
   "err.update.restore_partial": "Previous version restored, but the replaced program file remains at %s: %s",

@@ -24,7 +24,7 @@ binary; nothing is loaded from a CDN. Versions and checksums: `internal/web/stat
 
 ## Go modules
 
-Modules compiled into `i-tracker` for windows and linux (amd64, arm64).
+Modules compiled into `i-tracker` for the release targets windows/amd64, linux/amd64, linux/arm64.
 
 | Module | Version | License | Targets |
 |---|---|---|---|
@@ -32,8 +32,8 @@ Modules compiled into `i-tracker` for windows and linux (amd64, arm64).
 | github.com/golang-jwt/jwt/v5 | v5.3.1 | MIT | all |
 | github.com/google/uuid | v1.6.0 | BSD-3-Clause | linux/amd64 linux/arm64 |
 | github.com/kardianos/service | v1.3.0 | Zlib | all |
-| github.com/mattn/go-isatty | v0.0.20 | MIT | windows/amd64 windows/arm64 |
-| github.com/ncruces/go-strftime | v0.1.9 | MIT | windows/amd64 windows/arm64 |
+| github.com/mattn/go-isatty | v0.0.20 | MIT | windows/amd64 |
+| github.com/ncruces/go-strftime | v0.1.9 | MIT | windows/amd64 |
 | github.com/oschwald/geoip2-golang | v1.11.0 | ISC | all |
 | github.com/oschwald/maxminddb-golang | v1.13.0 | ISC | all |
 | github.com/remyoudompheng/bigfft | v0.0.0-20230129092748-24d4a6f8daec | BSD-3-Clause | all |
