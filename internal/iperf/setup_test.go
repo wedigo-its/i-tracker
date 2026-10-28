@@ -16,8 +16,8 @@ import (
 	"i-tracker/internal/i18n"
 )
 
-// TestMain lässt die Test-Binary als gefälschtes iperf3 auftreten: Mit
-// FAKE_IPERF3_VERSION gibt sie eine Versionszeile aus und endet.
+// TestMain lets the test binary act as a fake iperf3: with FAKE_IPERF3_VERSION
+// it prints a version line and exits.
 func TestMain(m *testing.M) {
 	if v := os.Getenv("FAKE_IPERF3_VERSION"); v != "" {
 		fmt.Printf("iperf %s (cJSON 1.7.15)\n", v)
@@ -34,7 +34,7 @@ func TestInstallCommands(t *testing.T) {
 					return "/usr/bin/" + name, nil
 				}
 			}
-			return "", errors.New("nicht gefunden")
+			return "", errors.New("not found")
 		}
 	}
 	cases := []struct {
@@ -47,24 +47,24 @@ func TestInstallCommands(t *testing.T) {
 	}{
 		{"windows winget", "windows", []string{"winget"}, false,
 			[][]string{{"winget", "install", "--id", "ar51an.iPerf3", "-e", "--silent", "--accept-package-agreements", "--accept-source-agreements", "--disable-interactivity"}}, ""},
-		{"windows ohne winget", "windows", nil, false, nil, "winget is not available"},
-		{"debian als root", "linux", []string{"apt-get", "sudo"}, true,
+		{"windows without winget", "windows", nil, false, nil, "winget is not available"},
+		{"debian as root", "linux", []string{"apt-get", "sudo"}, true,
 			[][]string{{"apt-get", "update"}, {"apt-get", "install", "-y", "iperf3"}}, ""},
-		{"debian mit sudo", "linux", []string{"apt-get", "sudo"}, false,
+		{"debian with sudo", "linux", []string{"apt-get", "sudo"}, false,
 			[][]string{{"sudo", "-n", "apt-get", "update"}, {"sudo", "-n", "apt-get", "install", "-y", "iperf3"}}, ""},
 		{"fedora", "linux", []string{"dnf", "yum"}, true, [][]string{{"dnf", "install", "-y", "iperf3"}}, ""},
 		{"alpine", "linux", []string{"apk"}, true, [][]string{{"apk", "add", "--no-cache", "iperf3"}}, ""},
-		{"ohne root und sudo", "linux", []string{"zypper"}, false, nil, "requires root privileges"},
-		{"kein Paketmanager", "linux", nil, true, nil, "no supported package manager"},
+		{"no root and no sudo", "linux", []string{"zypper"}, false, nil, "requires root privileges"},
+		{"no package manager", "linux", nil, true, nil, "no supported package manager"},
 		{"macOS", "darwin", []string{"brew"}, false, [][]string{{"brew", "install", "iperf3"}}, ""},
-		{"unbekannt", "plan9", nil, true, nil, "not supported"},
+		{"unknown", "plan9", nil, true, nil, "not supported"},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
 			got, err := installCommands(c.goos, look(c.tools...), c.root)
 			if c.wantErr != "" {
 				if err == nil || !strings.Contains(err.Error(), c.wantErr) {
-					t.Fatalf("Fehler %v, erwartet %q", err, c.wantErr)
+					t.Fatalf("error %v, want %q", err, c.wantErr)
 				}
 				return
 			}
@@ -75,7 +75,7 @@ func TestInstallCommands(t *testing.T) {
 	}
 }
 
-// isolateSearch sorgt dafür, dass FindBinary nur dir durchsucht.
+// isolateSearch makes FindBinary search only dir.
 func isolateSearch(t *testing.T) string {
 	dir := t.TempDir()
 	t.Setenv("PATH", dir)
@@ -84,7 +84,7 @@ func isolateSearch(t *testing.T) string {
 	return dir
 }
 
-// placeFakeIperf kopiert die Test-Binary als iperf3 nach dir.
+// placeFakeIperf copies the test binary to dir as iperf3.
 func placeFakeIperf(t *testing.T, dir string) string {
 	t.Helper()
 	name := "iperf3"
@@ -113,15 +113,15 @@ func waitInstalled(t *testing.T, r *Runner) Status {
 	deadline := time.Now().Add(10 * time.Second)
 	for r.Status().Installing {
 		if time.Now().After(deadline) {
-			t.Fatal("Installation nicht rechtzeitig beendet")
+			t.Fatal("installation did not finish in time")
 		}
 		time.Sleep(10 * time.Millisecond)
 	}
 	return r.Status()
 }
 
-// stubInstall ersetzt Installationsplanung und Installation. Ist plan nil,
-// gilt iperf3 als installierbar per "fake install iperf3".
+// stubInstall replaces install planning and installation; with planErr nil,
+// iperf3 is installable via "fake install iperf3".
 func stubInstall(t *testing.T, planErr error, f func(ctx context.Context) error) *int {
 	t.Helper()
 	calls := 0
@@ -148,22 +148,22 @@ func TestInstallOnRequest(t *testing.T) {
 	r.Prepare("", false)
 	st := r.Status()
 	if st.Available || st.Installing || !st.Installable || st.InstallCommand != "fake install iperf3" || *calls != 0 {
-		t.Fatalf("ohne Auto-Installation: %+v, Aufrufe %d", st, *calls)
+		t.Fatalf("without auto install: %+v, calls %d", st, *calls)
 	}
 
 	if err := r.InstallAsync(); err != nil {
 		t.Fatal(err)
 	}
 	if err := r.InstallAsync(); !errors.Is(err, ErrInstallRunning) {
-		t.Errorf("zweiter Aufruf: %v, erwartet ErrInstallRunning", err)
+		t.Errorf("second call: %v, want ErrInstallRunning", err)
 	}
 	close(release)
 	st = waitInstalled(t, r)
 	if !st.Available || st.Version != "3.21" || st.Installable || *calls != 1 || r.commandLine()[0] != st.Path {
-		t.Fatalf("nach Installation: %+v, Aufrufe %d", st, *calls)
+		t.Fatalf("after install: %+v, calls %d", st, *calls)
 	}
 	if err := r.InstallAsync(); !errors.Is(err, ErrNotInstallable) {
-		t.Errorf("bereits vorhanden: %v, erwartet ErrNotInstallable", err)
+		t.Errorf("already present: %v, want ErrNotInstallable", err)
 	}
 }
 
@@ -176,7 +176,7 @@ func TestPrepareAutoInstall(t *testing.T) {
 	t.Cleanup(r.Stop)
 	r.Prepare("", true)
 	if st := waitInstalled(t, r); !st.Available || *calls != 1 {
-		t.Fatalf("auto_install: %+v, Aufrufe %d", st, *calls)
+		t.Fatalf("auto_install: %+v, calls %d", st, *calls)
 	}
 }
 
@@ -195,7 +195,7 @@ func TestInstallFailureCanBeRetried(t *testing.T) {
 		t.Fatalf("Status: %+v", st)
 	}
 	if err := r.InstallAsync(); err != nil {
-		t.Errorf("erneuter Versuch: %v", err)
+		t.Errorf("retry: %v", err)
 	}
 	waitInstalled(t, r)
 }
@@ -206,18 +206,18 @@ func TestNotInstallable(t *testing.T) {
 	r := NewRunner(nil, "iperf3")
 	t.Cleanup(r.Stop)
 
-	// Fest konfigurierter Pfad wird nie ersetzt, auch nicht mit auto_install.
-	r.Prepare(filepath.Join(dir, "gibt-es-nicht.exe"), true)
+	// A configured path is never replaced, not even with auto_install.
+	r.Prepare(filepath.Join(dir, "does-not-exist.exe"), true)
 	if st := r.Status(); st.Installable || st.Installing || *calls != 0 || !errors.Is(r.InstallAsync(), ErrNotInstallable) {
-		t.Fatalf("konfigurierter Pfad: %+v, Aufrufe %d", st, *calls)
+		t.Fatalf("configured path: %+v, calls %d", st, *calls)
 	}
 
-	// Zu alte Version: nur melden.
+	// Too old version: report only.
 	placeFakeIperf(t, dir)
 	t.Setenv("FAKE_IPERF3_VERSION", "3.12")
 	r.Prepare("", true)
 	if st := r.Status(); st.Installable || st.Installing || *calls != 0 || !strings.Contains(st.Error, "too old") {
-		t.Fatalf("zu alt: %+v, Aufrufe %d", st, *calls)
+		t.Fatalf("too old: %+v, calls %d", st, *calls)
 	}
 }
 

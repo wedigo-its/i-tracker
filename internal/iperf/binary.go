@@ -15,15 +15,14 @@ import (
 	"i-tracker/internal/i18n"
 )
 
-// Mindestversion für --json-stream.
+// Minimum version for --json-stream.
 const minMajor, minMinor = 3, 17
 
-// ErrNotInstalled meldet, dass keine ausführbare iperf3-Binary gefunden wurde.
+// ErrNotInstalled reports that no executable iperf3 binary was found.
 var ErrNotInstalled = i18n.E("err.iperf.not_installed")
 
-// FindBinary liefert den Pfad zu iperf3: den konfigurierten Pfad, sonst die
-// Suche im PATH, unter Windows zusätzlich die Ablageorte von winget (Benutzer-
-// und Maschineninstallation) und übliche manuelle Installationsorte.
+// FindBinary returns the iperf3 path: the configured one, else PATH, on Windows
+// also winget locations (user and machine) and common manual install paths.
 func FindBinary(configured string) string {
 	if configured != "" {
 		return configured
@@ -56,9 +55,9 @@ func fileExists(p string) bool {
 
 var versionRe = regexp.MustCompile(`iperf (\d+)\.(\d+)`)
 
-// CheckVersion ermittelt die iperf3-Version und prüft, ob sie --json-stream
-// unterstützt. Die Version wird auch im Fehlerfall geliefert, sofern bekannt.
-// Fehlt die Binary, ist der Fehler ErrNotInstalled.
+// CheckVersion returns the iperf3 version and checks --json-stream support.
+// The version is returned on error too if known; a missing binary yields
+// ErrNotInstalled.
 func CheckVersion(binary string) (string, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()

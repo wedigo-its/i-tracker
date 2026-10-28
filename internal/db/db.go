@@ -1,5 +1,4 @@
-// Package db öffnet die SQLite-Datenbank und legt das Schema an.
-// Genutzt wird der reine Go-Treiber modernc.org/sqlite (kein CGO erforderlich).
+// Package db opens the SQLite database and creates the schema (pure-Go driver, no CGO).
 package db
 
 import (
@@ -15,21 +14,19 @@ import (
 //go:embed schema.sql
 var schema string
 
-// Open öffnet (bzw. erstellt) die SQLite-Datenbank unter path und legt das
-// Schema an. Das Verzeichnis wird bei Bedarf erzeugt.
+// Open opens or creates the database at path, including its directory, and applies the schema.
 func Open(path string) (*sql.DB, error) {
 	if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
 		return nil, fmt.Errorf("database directory could not be created: %w", err)
 	}
 
-	// Die PRAGMAs gelten pro Verbindung; über die DSN setzt der Treiber sie
-	// auf jeder neu geöffneten Verbindung.
+	// PRAGMAs are per connection; via the DSN the driver sets them on every new one.
 	dsn := path + "?_pragma=foreign_keys(1)&_pragma=journal_mode(WAL)&_pragma=busy_timeout(5000)"
 	conn, err := sql.Open("sqlite", dsn)
 	if err != nil {
 		return nil, fmt.Errorf("database could not be opened: %w", err)
 	}
-	conn.SetMaxOpenConns(1) // SQLite: Schreibzugriffe serialisieren
+	conn.SetMaxOpenConns(1) // SQLite: serialize writes
 
 	if _, err := conn.Exec(schema); err != nil {
 		conn.Close()
@@ -42,8 +39,7 @@ func Open(path string) (*sql.DB, error) {
 	return conn, nil
 }
 
-// columnMigrations ergänzt Spalten, die in älteren Datenbanken fehlen
-// (CREATE TABLE IF NOT EXISTS ändert bestehende Tabellen nicht).
+// columnMigrations adds columns missing in older databases (CREATE TABLE IF NOT EXISTS leaves existing tables alone).
 var columnMigrations = []struct{ table, column, ddl string }{
 	{"users", "must_change_password", `ALTER TABLE users ADD COLUMN must_change_password BOOLEAN NOT NULL DEFAULT 0`},
 	{"users", "token_version", `ALTER TABLE users ADD COLUMN token_version INTEGER NOT NULL DEFAULT 0`},

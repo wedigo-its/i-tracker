@@ -1,4 +1,4 @@
-// Package web stellt die Oberfläche (eingebettet) und die HTTP-API bereit.
+// Package web serves the embedded UI and the HTTP API.
 package web
 
 import (
@@ -26,31 +26,30 @@ import (
 //go:embed static
 var static embed.FS
 
-// Deps sind die Abhängigkeiten des HTTP-Servers.
+// Deps are the HTTP server's dependencies.
 type Deps struct {
 	Store     *store.Store
 	Tokens    *auth.Tokens
 	Runner    *iperf.Runner
 	Tracer    *trace.Tracer
 	Scheduler *scheduler.Scheduler
-	// Map ist die Kartenkonfiguration der Peering-Map (leer = eingebettete Weltkarte).
+	// Map configures the peering map (empty = embedded world map).
 	Map MapSettings
-	// GeoIP liefert den Zustand der Standort-Datenbank (optional).
+	// GeoIP reports the location database state (optional).
 	GeoIP func() trace.GeoInfo
-	// PublicRead erlaubt Gästen ohne Anmeldung die lesenden Endpunkte
-	// (auth.public_read); ändernde verlangen weiter eine Anmeldung.
+	// PublicRead opens read-only endpoints to guests (auth.public_read).
 	PublicRead bool
 }
 
-// MapSettings beschreibt den Kartenhintergrund für die Oberfläche.
+// MapSettings describes the UI map background.
 type MapSettings struct {
 	TileURL         string `json:"tile_url"`
 	TileAttribution string `json:"tile_attribution"`
-	// TileOrigin ist Schema und Host des Kachelservers für die CSP (img-src).
+	// TileOrigin is the tile server's scheme and host for the CSP img-src.
 	TileOrigin string `json:"-"`
 }
 
-// Server bündelt die HTTP-Handler.
+// Server holds the HTTP handlers.
 type Server struct {
 	store     *store.Store
 	tokens    *auth.Tokens
@@ -61,37 +60,34 @@ type Server struct {
 	geoInfo   func() trace.GeoInfo
 	mux       *http.ServeMux
 	handler   http.Handler
-	// publicRead: Gäste dürfen die lesenden Endpunkte nutzen (siehe optionalUser).
+	// publicRead: guests may use read-only endpoints (see optionalUser).
 	publicRead bool
 
 	testTraces testTraces
-	// legacyAdmin erkennt das frühere Standardpasswort für /api/auth/status.
+	// legacyAdmin detects the legacy default password for /api/auth/status.
 	legacyAdmin legacyPasswordCache
-	// limiter bremst Fehlanmeldungen (Login und falsches aktuelles Passwort
-	// beim Passwortwechsel) je Client-Adresse.
+	// limiter throttles failed sign-ins and wrong current passwords per client address.
 	limiter *auth.Limiter
-	// revoked enthält die abgemeldeten Sitzungen bis zu ihrem Ablauf.
+	// revoked holds signed-out sessions until they expire.
 	revoked *auth.Revocations
 
-	// routeList hält die API-Routen für die Produktdokumentation (Routes).
+	// routeList holds the API routes for the product docs (Routes).
 	routeList []Route
 }
 
-// Route beschreibt eine API-Route für die Produktdokumentation (i-tracker reference).
-// Access: public (immer offen), read (lesend; mit auth.public_read auch für Gäste),
-// user (Anmeldung nötig) oder admin (Administrator).
+// Route describes an API route for the product docs (i-tracker reference).
+// Access: public, read (guests too with auth.public_read), user or admin.
 type Route struct {
 	Pattern string `json:"route"`
 	Access  string `json:"access"`
 }
 
-// Routes liefert alle API-Routen in der Reihenfolge der Registrierung. Die Oberfläche
-// selbst (/, /static/) zählt nicht dazu.
+// Routes returns all API routes in registration order, excluding the UI (/, /static/).
 func Routes() []Route {
 	return NewServer(Deps{}).routeList
 }
 
-// NewServer erstellt den HTTP-Server.
+// NewServer creates the HTTP server.
 func NewServer(d Deps) *Server {
 	s := &Server{
 		store:      d.Store,
@@ -116,25 +112,22 @@ func NewServer(d Deps) *Server {
 	return s
 }
 
-// Handler liefert den HTTP-Handler.
+// Handler returns the HTTP handler.
 func (s *Server) Handler() http.Handler { return s.handler }
 
 func (s *Server) routes() {
-	// add registriert eine API-Route und merkt sie sich mit ihrer Zugriffsstufe für die Doku (Routes).
+	// add registers an API route and records its access level for Routes.
 	add := func(pattern, access string, h http.Handler) {
 		s.mux.Handle(pattern, h)
 		s.routeList = append(s.routeList, Route{Pattern: pattern, Access: access})
 	}
-	// Oberfläche: index.html unter "/", Skripte und Styles unter /static/.
 	s.mux.HandleFunc("GET /{$}", handleIndex)
 	s.mux.Handle("GET /static/", noCache(http.FileServerFS(static)))
-	// Fremdbibliotheken ändern sich nur mit neuen Versionen: einen Tag zwischenspeichern.
+	// Vendor libraries change only with new releases: cache for a day.
 	s.mux.Handle("GET /static/vendor/", cacheFor(24*time.Hour, http.FileServerFS(static)))
 	add("GET /api/info", "public", http.HandlerFunc(s.handleInfo))
 	add("GET /health", "public", http.HandlerFunc(s.handleHealth))
-	// Lesende Endpunkte der Oberfläche nutzen optionalUser: Mit
-	// auth.public_read dürfen auch Gäste sie aufrufen (u == nil), sonst
-	// verlangen sie wie alle ändernden Endpunkte eine Anmeldung.
+	// Read-only UI endpoints use optionalUser (guests allowed with auth.public_read).
 	add("GET /api/status", "read", s.optionalUser(s.handleStatus))
 
 	add("POST /api/auth/login", "public", http.HandlerFunc(s.handleLogin))
@@ -174,9 +167,8 @@ func (s *Server) routes() {
 	add("GET /api/traces/test/{test_id}", "read", s.optionalUser(s.handleTracesByTest))
 	add("DELETE /api/traces/{trace_id}", "user", s.requireUser(s.handleDeleteTrace))
 
-	// Startet eine Traceroute zu einem beliebigen Ziel und speichert sie – eine
-	// Aktion, daher auch mit auth.public_read nur für angemeldete Benutzer.
-	// Anmeldung per Sitzungs-Cookie (EventSource) oder Bearer-Token; Fehler als SSE-Event.
+	// Runs and saves a trace to any target, so signed-in users only even with
+	// auth.public_read; auth errors arrive as SSE events.
 	add("GET /api/live-trace/stream/{destination}", "user", http.HandlerFunc(s.handleLiveTrace))
 
 	add("DELETE /api/admin/cleanup/tests", "admin", s.requireAdmin(s.handleCleanupTests))
@@ -184,7 +176,7 @@ func (s *Server) routes() {
 	add("GET /api/admin/stats/database", "admin", s.requireAdmin(s.handleDatabaseStats))
 	add("POST /api/iperf3/install", "admin", s.requireAdmin(s.handleInstallIperf))
 
-	// Öffentlich: statische Liste ohne Benutzerdaten.
+	// Public: static list without user data.
 	add("GET /api/public-servers", "public", http.HandlerFunc(s.handlePublicServers))
 	add("GET /api/public-servers/search", "public", http.HandlerFunc(s.handleSearchPublicServers))
 }
@@ -197,10 +189,8 @@ func (s *Server) handleInfo(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// handleStatus liefert den Betriebszustand für den Statuspunkt der Oberfläche.
-// Angemeldete Benutzer erhalten den vollständigen iperf3-Status mit lokalem
-// Pfad, Fehlermeldung und Installationsbefehl; Gäste (u == nil) nur, ob
-// iperf3 verfügbar ist, und die Version.
+// handleStatus feeds the UI status dot; guests (u == nil) get only iperf3
+// availability and version, not local path, error or install command.
 func (s *Server) handleStatus(w http.ResponseWriter, r *http.Request, u *model.User) {
 	geo := trace.GeoInfo{}
 	if s.geoInfo != nil {
@@ -307,7 +297,7 @@ func handleIndex(w http.ResponseWriter, r *http.Request) {
 	w.Write(data)
 }
 
-// cacheFor erlaubt dem Browser, die Antwort für d zwischenzuspeichern.
+// cacheFor lets the browser cache the response for d.
 func cacheFor(d time.Duration, next http.Handler) http.Handler {
 	v := "public, max-age=" + strconv.Itoa(int(d/time.Second))
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -317,12 +307,11 @@ func cacheFor(d time.Duration, next http.Handler) http.Handler {
 }
 
 func init() {
-	// Die eingebettete Weltkarte (GeoJSON) mit passendem Typ ausliefern.
+	// Serve the embedded world map with the right type.
 	_ = mime.AddExtensionType(".geojson", "application/geo+json")
 }
 
-// noCache lässt den Browser eingebettete Dateien bei jedem Laden prüfen, damit
-// nach einem neuen Build sofort die aktuelle Oberfläche erscheint.
+// noCache forces revalidation so a new build shows the current UI at once.
 func noCache(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Cache-Control", "no-cache")

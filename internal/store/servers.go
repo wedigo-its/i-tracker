@@ -28,12 +28,12 @@ func scanServer(row rowScanner) (*model.Server, error) {
 	return &sv, nil
 }
 
-// ServerByID lädt ein Server-Profil anhand seiner ID.
+// ServerByID loads a server profile by ID.
 func (s *Store) ServerByID(ctx context.Context, id int64) (*model.Server, error) {
 	return scanServer(s.db.QueryRowContext(noCancel(ctx), `SELECT `+serverColumns+` FROM servers WHERE id = ?`, id))
 }
 
-// ListServers liefert Server-Profile, neueste zuerst. enabled filtert optional.
+// ListServers returns server profiles, newest first, optionally filtered by enabled.
 func (s *Store) ListServers(ctx context.Context, enabled *bool, skip, limit int) ([]model.Server, error) {
 	query := `SELECT ` + serverColumns + ` FROM servers`
 	args := []any{}
@@ -61,8 +61,7 @@ func (s *Store) ListServers(ctx context.Context, enabled *bool, skip, limit int)
 	return servers, rows.Err()
 }
 
-// CreateServer speichert sv und setzt ID und Zeitstempel. Ein bereits
-// vergebener Name ergibt ErrDuplicate.
+// CreateServer stores sv and sets ID and timestamps; a taken name yields ErrDuplicate.
 func (s *Store) CreateServer(ctx context.Context, sv *model.Server) error {
 	sv.CreatedAt = db.Now()
 	sv.UpdatedAt = sv.CreatedAt
@@ -82,7 +81,7 @@ func (s *Store) CreateServer(ctx context.Context, sv *model.Server) error {
 	return err
 }
 
-// UpdateServer schreibt alle pflegbaren Felder von sv und setzt UpdatedAt.
+// UpdateServer writes all editable fields of sv and sets UpdatedAt.
 func (s *Store) UpdateServer(ctx context.Context, sv *model.Server) error {
 	sv.UpdatedAt = db.Now()
 	err := affectedOne(s.db.ExecContext(noCancel(ctx),
@@ -99,7 +98,7 @@ func (s *Store) UpdateServer(ctx context.Context, sv *model.Server) error {
 	return mapUnique(err)
 }
 
-// DeleteServer löscht ein Server-Profil; Tests und Traces folgen per ON DELETE CASCADE.
+// DeleteServer deletes a server profile; tests and traces cascade.
 func (s *Store) DeleteServer(ctx context.Context, id int64) error {
 	return affectedOne(s.db.ExecContext(noCancel(ctx), `DELETE FROM servers WHERE id = ?`, id))
 }

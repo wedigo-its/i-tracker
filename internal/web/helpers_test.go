@@ -17,24 +17,23 @@ import (
 	"i-tracker/internal/trace"
 )
 
-// testSecret ist der Signaturschlüssel der Test-Server.
+// testSecret is the test servers' signing key.
 const testSecret = "test-secret"
 
-// newTestServer startet die API auf einer frischen Datenbank mit Standard-Admin.
+// newTestServer starts the API on a fresh database with the default admin.
 func newTestServer(t *testing.T) *httptest.Server {
 	t.Helper()
 	return newTestServerWithTracer(t, nil)
 }
 
-// newTestServerWithTracer erlaubt einen eigenen Tracer; nil = ohne traceroute-Binary.
+// newTestServerWithTracer takes a custom tracer; nil = no traceroute binary.
 func newTestServerWithTracer(t *testing.T, tracer *trace.Tracer) *httptest.Server {
 	t.Helper()
 	srv, _ := newTestServerOpts(t, tracer, false)
 	return srv
 }
 
-// newTestServerOpts startet die API mit eigenem Tracer (nil = ohne
-// traceroute-Binary) und auth.public_read; liefert auch den Store.
+// newTestServerOpts also sets auth.public_read and returns the store.
 func newTestServerOpts(t *testing.T, tracer *trace.Tracer, publicRead bool) (*httptest.Server, *store.Store) {
 	t.Helper()
 	conn, err := db.Open(filepath.Join(t.TempDir(), "test.db"))
@@ -52,16 +51,15 @@ func newTestServerOpts(t *testing.T, tracer *trace.Tracer, publicRead bool) (*ht
 		t.Fatal(err)
 	}
 
-	// Nicht vorhandene Binaries: Tests und Traces schlagen sofort und
-	// deterministisch fehl. Die eigentliche Ausführung testen die Pakete iperf
-	// und trace.
+	// Missing binaries make tests and traces fail fast and deterministically;
+	// the iperf and trace packages test real execution.
 	runner := iperf.NewRunner(st, filepath.Join(t.TempDir(), "kein-iperf3"))
 	t.Cleanup(runner.Stop)
 
 	if tracer == nil {
 		tracer = trace.NewTracer(nil, filepath.Join(t.TempDir(), "kein-traceroute"))
 	}
-	// Scheduler wird nicht gestartet (wie bei scheduler.enabled: false).
+	// Scheduler not started (as with scheduler.enabled: false).
 	srv := httptest.NewServer(NewServer(Deps{
 		Store:      st,
 		Tokens:     auth.NewTokens(testSecret, 0),
@@ -74,8 +72,7 @@ func newTestServerOpts(t *testing.T, tracer *trace.Tracer, publicRead bool) (*ht
 	return srv, st
 }
 
-// call führt einen Request aus, dekodiert die Antwort nach out (falls nicht
-// nil und ein Body vorhanden ist) und liefert den Statuscode.
+// call sends a request, decodes the body into out (if non-nil) and returns the status.
 func call(t *testing.T, srv *httptest.Server, method, path, token, body string, out any) int {
 	t.Helper()
 	req, err := http.NewRequest(method, srv.URL+path, strings.NewReader(body))
@@ -92,7 +89,7 @@ func call(t *testing.T, srv *httptest.Server, method, path, token, body string, 
 	defer resp.Body.Close()
 	if out != nil && resp.StatusCode != http.StatusNoContent {
 		if err := json.NewDecoder(resp.Body).Decode(out); err != nil {
-			t.Fatalf("%s %s: Antwort nicht lesbar: %v", method, path, err)
+			t.Fatalf("%s %s: unreadable response: %v", method, path, err)
 		}
 	}
 	return resp.StatusCode
@@ -103,7 +100,7 @@ func login(t *testing.T, srv *httptest.Server, username, password string) string
 	var out map[string]any
 	code := call(t, srv, "POST", "/api/auth/login", "", `{"username":"`+username+`","password":"`+password+`"}`, &out)
 	if code != http.StatusOK {
-		t.Fatalf("Login %s: Status %d, %v", username, code, out)
+		t.Fatalf("login %s: status %d, %v", username, code, out)
 	}
 	if out["token_type"] != "bearer" {
 		t.Fatalf("token_type = %v", out["token_type"])
@@ -111,10 +108,10 @@ func login(t *testing.T, srv *httptest.Server, username, password string) string
 	return out["access_token"].(string)
 }
 
-// expectStatus prüft nur den Statuscode eines Requests.
+// expectStatus checks only the status code.
 func expectStatus(t *testing.T, srv *httptest.Server, method, path, token, body string, want int) {
 	t.Helper()
 	if got := call(t, srv, method, path, token, body, nil); got != want {
-		t.Errorf("%s %s: Status %d, erwartet %d", method, path, got, want)
+		t.Errorf("%s %s: status %d, want %d", method, path, got, want)
 	}
 }

@@ -16,9 +16,8 @@ import (
 	"i-tracker/internal/trace"
 )
 
-// TestLiveTraceHelper ersetzt tracert/traceroute in TestLiveTrace: drei Hops,
-// der letzte ist das Ziel 127.0.0.1, danach eine Zeile, die nicht mehr
-// gelesen werden darf.
+// TestLiveTraceHelper fakes traceroute for TestLiveTrace: three hops ending at
+// 127.0.0.1, then a line that must not be read.
 func TestLiveTraceHelper(t *testing.T) {
 	if os.Getenv("LIVE_TRACE_HELPER") != "1" {
 		return
@@ -46,7 +45,7 @@ type sseEvent struct {
 	TraceID     int64            `json:"trace_id"`
 }
 
-// readSSE liest alle data-Events, bis der Server die Verbindung schließt.
+// readSSE reads all data events until the server closes the connection.
 func readSSE(t *testing.T, srv *httptest.Server, destination, token string) []sseEvent {
 	t.Helper()
 	req, err := http.NewRequest("GET", srv.URL+"/api/live-trace/stream/"+url.PathEscape(destination), nil)
@@ -73,7 +72,7 @@ func readSSE(t *testing.T, srv *httptest.Server, destination, token string) []ss
 		}
 		var ev sseEvent
 		if err := json.Unmarshal([]byte(data), &ev); err != nil {
-			t.Fatalf("Event nicht lesbar: %s", data)
+			t.Fatalf("unreadable event: %s", data)
 		}
 		events = append(events, ev)
 	}
@@ -95,25 +94,25 @@ func TestLiveTrace(t *testing.T) {
 
 	events := readSSE(t, srv, "127.0.0.1", tok)
 	if got := eventTypes(events); got != "start,hop,hop,hop,interpolation_complete,complete" {
-		t.Fatalf("Events: %s", got)
+		t.Fatalf("events: %s", got)
 	}
 	if events[0].Destination != "127.0.0.1" {
 		t.Errorf("start: %+v", events[0])
 	}
 	if h := events[3].Data; h.HopNumber != 3 || h.IPAddress == nil || *h.IPAddress != "127.0.0.1" {
-		t.Errorf("letzter Hop: %+v", h)
+		t.Errorf("last hop: %+v", h)
 	}
 	if len(events[4].Hops) != 3 || events[4].Hops[1].Responded {
 		t.Errorf("interpolation_complete: %+v", events[4].Hops)
 	}
 
-	// Gespeichert, bevor "complete" gesendet wird.
+	// Saved before "complete" is sent.
 	var saved model.Trace
 	if code := call(t, srv, "GET", "/api/traces/"+itoa(events[5].TraceID), tok, "", &saved); code != http.StatusOK {
-		t.Fatalf("gespeicherter Trace: %d", code)
+		t.Fatalf("saved trace: %d", code)
 	}
 	if !saved.Completed || saved.TestID != nil || len(saved.Hops) != 3 || saved.DestinationHost != "127.0.0.1" {
-		t.Errorf("gespeicherter Trace: %+v", saved)
+		t.Errorf("saved trace: %+v", saved)
 	}
 }
 
@@ -121,22 +120,20 @@ func TestLiveTraceErrors(t *testing.T) {
 	srv := newTestServer(t)
 	tok := login(t, srv, "admin", "admin123")
 
-	// Ungültiges Token: error-Event statt HTTP-Fehler (EventSource sieht keinen Status).
+	// Invalid token: error event instead of HTTP error (EventSource sees no status).
 	if events := readSSE(t, srv, "127.0.0.1", "kaputt"); eventTypes(events) != "error" || events[0].Message == "" ||
 		events[0].Code == nil || *events[0].Code != "err.auth.unauthorized" {
-		t.Errorf("ohne gültiges Token: %+v", events)
+		t.Errorf("without valid token: %+v", events)
 	}
-	// Ohne traceroute-Binary und ohne Hops: start, dann error; nichts gespeichert.
-	// The error stored with the trace carries its catalog key as code, like
-	// every other error event.
+	// No traceroute binary, no hops: start, then error with its catalog key; nothing saved.
 	events := readSSE(t, srv, "127.0.0.1", tok)
 	if eventTypes(events) != "start,error" || !strings.Contains(events[1].Message, "nicht gefunden") {
-		t.Errorf("ohne Werkzeug: %+v", events)
+		t.Errorf("without tool: %+v", events)
 	} else if events[1].Code == nil || *events[1].Code != "err.trace.tool_missing" {
-		t.Errorf("ohne Werkzeug: code %v, want err.trace.tool_missing", events[1].Code)
+		t.Errorf("without tool: code %v, want err.trace.tool_missing", events[1].Code)
 	}
 	var list []model.Trace
 	if call(t, srv, "GET", "/api/traces", tok, "", &list); len(list) != 0 {
-		t.Errorf("fehlgeschlagener Live-Trace wurde gespeichert: %d", len(list))
+		t.Errorf("failed live trace was saved: %d", len(list))
 	}
 }

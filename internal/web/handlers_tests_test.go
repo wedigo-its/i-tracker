@@ -10,21 +10,21 @@ import (
 	"i-tracker/internal/model"
 )
 
-// waitTestDone pollt den Live-Status, bis der Test nicht mehr wartet oder läuft.
+// waitTestDone polls the live status until the test is no longer pending or running.
 func waitTestDone(t *testing.T, srv *httptest.Server, tok string, id int64) map[string]any {
 	t.Helper()
 	deadline := time.Now().Add(10 * time.Second)
 	for time.Now().Before(deadline) {
 		var live map[string]any
 		if code := call(t, srv, "GET", "/api/tests/"+itoa(id)+"/live", tok, "", &live); code != http.StatusOK {
-			t.Fatalf("live: Status %d", code)
+			t.Fatalf("live: status %d", code)
 		}
 		if s := live["status"]; s == "completed" || s == "failed" {
 			return live
 		}
 		time.Sleep(50 * time.Millisecond)
 	}
-	t.Fatalf("Test %d nicht rechtzeitig beendet", id)
+	t.Fatalf("test %d did not finish in time", id)
 	return nil
 }
 
@@ -34,7 +34,7 @@ func TestRunAndQueryTests(t *testing.T) {
 
 	var sv model.Server
 	if code := call(t, srv, "POST", "/api/servers", tok, `{"name":"A","host":"127.0.0.1"}`, &sv); code != http.StatusCreated {
-		t.Fatalf("Server anlegen: %d", code)
+		t.Fatalf("create server: %d", code)
 	}
 	var off model.Server
 	call(t, srv, "POST", "/api/servers", tok, `{"name":"Aus","host":"x","enabled":false}`, &off)
@@ -45,17 +45,16 @@ func TestRunAndQueryTests(t *testing.T) {
 	expectStatus(t, srv, "POST", "/api/tests/run", tok, `{"server_id":`+itoa(sv.ID)+`,"duration":0}`, http.StatusUnprocessableEntity)
 	expectStatus(t, srv, "POST", "/api/tests/run", tok, `{"server_id":`+itoa(sv.ID)+`,"direction":"seitwärts"}`, http.StatusUnprocessableEntity)
 
-	// Start: sofort 201 mit Status pending und Vorgabewerten.
+	// Start: immediate 201, status pending, defaults.
 	var test model.Test
 	if code := call(t, srv, "POST", "/api/tests/run", tok, `{"server_id":`+itoa(sv.ID)+`,"direction":"bidirectional"}`, &test); code != http.StatusCreated {
-		t.Fatalf("Test starten: %d", code)
+		t.Fatalf("start test: %d", code)
 	}
 	if test.Status != model.StatusPending || test.Duration != 10 || test.ParallelStreams != 1 || test.Protocol != model.ProtocolTCP {
-		t.Errorf("neuer Test: %+v", test)
+		t.Errorf("new test: %+v", test)
 	}
 
-	// Der Test-Runner hat keine iperf3-Binary: der Test schlägt fehl, der
-	// Live-Status bleibt aber noch als „laufend“ abrufbar.
+	// No iperf3 binary: the test fails but its live status still reads as running.
 	live := waitTestDone(t, srv, tok, test.ID)
 	if live["status"] != "failed" || live["is_running"] != true || live["server_name"] != "A" {
 		t.Errorf("live: %v", live)
@@ -63,22 +62,22 @@ func TestRunAndQueryTests(t *testing.T) {
 
 	var detail map[string]any
 	if code := call(t, srv, "GET", "/api/tests/"+itoa(test.ID), tok, "", &detail); code != http.StatusOK {
-		t.Fatalf("Detail: %d", code)
+		t.Fatalf("detail: %d", code)
 	}
 	if detail["status"] != "failed" || detail["error_message"] == nil || detail["server"].(map[string]any)["name"] != "A" {
-		t.Errorf("Detail: %v", detail)
+		t.Errorf("detail: %v", detail)
 	}
 	if _, ok := detail["raw_output"]; !ok {
-		t.Error("Detail ohne raw_output")
+		t.Error("detail without raw_output")
 	}
 
 	var list []map[string]any
 	call(t, srv, "GET", "/api/tests", tok, "", &list)
 	if len(list) != 1 {
-		t.Fatalf("Liste: %d Einträge", len(list))
+		t.Fatalf("list: %d entries", len(list))
 	}
 	if _, ok := list[0]["raw_output"]; ok {
-		t.Error("Liste darf raw_output nicht enthalten")
+		t.Error("list must not contain raw_output")
 	}
 	for query, want := range map[string]int{
 		"status=failed":             1,
@@ -90,13 +89,13 @@ func TestRunAndQueryTests(t *testing.T) {
 	} {
 		call(t, srv, "GET", "/api/tests?"+query, tok, "", &list)
 		if len(list) != want {
-			t.Errorf("Filter %s: %d Einträge, erwartet %d", query, len(list), want)
+			t.Errorf("filter %s: %d entries, want %d", query, len(list), want)
 		}
 	}
 	expectStatus(t, srv, "GET", "/api/tests?status=kaputt", tok, "", http.StatusUnprocessableEntity)
 	expectStatus(t, srv, "GET", "/api/tests?from_date=gestern", tok, "", http.StatusUnprocessableEntity)
 
-	// Kein erfolgreicher Test: latest liefert null.
+	// No completed test: latest returns null.
 	var latest any = "unverändert"
 	if code := call(t, srv, "GET", "/api/tests/server/"+itoa(sv.ID)+"/latest", tok, "", &latest); code != http.StatusOK || latest != nil {
 		t.Errorf("latest: %d, %v", code, latest)
@@ -107,7 +106,7 @@ func TestRunAndQueryTests(t *testing.T) {
 	expectStatus(t, srv, "DELETE", "/api/tests/"+itoa(test.ID), tok, "", http.StatusNoContent)
 	expectStatus(t, srv, "DELETE", "/api/tests/"+itoa(test.ID), tok, "", http.StatusNotFound)
 
-	// Löschen eines Servers entfernt seine Tests mit.
+	// Deleting a server deletes its tests.
 	call(t, srv, "POST", "/api/tests/run", tok, `{"server_id":`+itoa(sv.ID)+`}`, &test)
 	waitTestDone(t, srv, tok, test.ID)
 	expectStatus(t, srv, "DELETE", "/api/servers/"+itoa(sv.ID), tok, "", http.StatusNoContent)
@@ -121,7 +120,7 @@ func TestUDPBandwidth(t *testing.T) {
 	var plain model.Server
 	call(t, srv, "POST", "/api/servers", tok, `{"name":"ohne","host":"a"}`, &plain)
 	if plain.DefaultUDPBandwidthMbps != nil {
-		t.Errorf("Vorgabe ohne Angabe: %v", *plain.DefaultUDPBandwidthMbps)
+		t.Errorf("default when omitted: %v", *plain.DefaultUDPBandwidthMbps)
 	}
 	expectStatus(t, srv, "POST", "/api/servers", tok, `{"name":"x","host":"x","default_udp_bandwidth_mbps":0}`, http.StatusUnprocessableEntity)
 	expectStatus(t, srv, "POST", "/api/servers", tok, `{"name":"x","host":"x","default_udp_bandwidth_mbps":100001}`, http.StatusUnprocessableEntity)
@@ -129,34 +128,34 @@ func TestUDPBandwidth(t *testing.T) {
 	var sv model.Server
 	if code := call(t, srv, "POST", "/api/servers", tok, `{"name":"udp","host":"b","default_udp_bandwidth_mbps":500}`, &sv); code != http.StatusCreated ||
 		sv.DefaultUDPBandwidthMbps == nil || *sv.DefaultUDPBandwidthMbps != 500 {
-		t.Fatalf("Server mit UDP-Vorgabe: %d, %+v", code, sv)
+		t.Fatalf("server with UDP default: %d, %+v", code, sv)
 	}
 
 	start := func(body string) model.Test {
 		t.Helper()
 		var test model.Test
 		if code := call(t, srv, "POST", "/api/tests/run", tok, body, &test); code != http.StatusCreated {
-			t.Fatalf("Test starten (%s): %d", body, code)
+			t.Fatalf("start test (%s): %d", body, code)
 		}
 		waitTestDone(t, srv, tok, test.ID)
 		return test
 	}
 	id := itoa(sv.ID)
 	if test := start(`{"server_id":` + id + `,"protocol":"udp"}`); test.UDPBandwidthMbps == nil || *test.UDPBandwidthMbps != 500 {
-		t.Errorf("UDP ohne Angabe übernimmt Server-Vorgabe nicht: %v", test.UDPBandwidthMbps)
+		t.Errorf("UDP without value ignores the server default: %v", test.UDPBandwidthMbps)
 	}
 	if test := start(`{"server_id":` + id + `,"protocol":"udp","udp_bandwidth_mbps":42.5}`); test.UDPBandwidthMbps == nil || *test.UDPBandwidthMbps != 42.5 {
-		t.Errorf("UDP mit Angabe: %v", test.UDPBandwidthMbps)
+		t.Errorf("UDP with value: %v", test.UDPBandwidthMbps)
 	}
 	if test := start(`{"server_id":` + id + `,"protocol":"tcp","udp_bandwidth_mbps":42.5}`); test.UDPBandwidthMbps != nil {
-		t.Errorf("TCP darf keine UDP-Bandbreite speichern: %v", *test.UDPBandwidthMbps)
+		t.Errorf("TCP must not store a UDP bandwidth: %v", *test.UDPBandwidthMbps)
 	}
 	expectStatus(t, srv, "POST", "/api/tests/run", tok, `{"server_id":`+id+`,"protocol":"udp","udp_bandwidth_mbps":-1}`, http.StatusUnprocessableEntity)
 
-	// Partielles Update kann die Vorgabe wieder entfernen.
+	// A partial update can clear the default.
 	var upd model.Server
 	call(t, srv, "PUT", "/api/servers/"+id, tok, `{"default_udp_bandwidth_mbps":null}`, &upd)
 	if upd.DefaultUDPBandwidthMbps != nil {
-		t.Errorf("Vorgabe nach null: %v", *upd.DefaultUDPBandwidthMbps)
+		t.Errorf("default after null: %v", *upd.DefaultUDPBandwidthMbps)
 	}
 }

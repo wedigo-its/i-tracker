@@ -13,10 +13,8 @@ import (
 	"i-tracker/internal/model"
 )
 
-// TestErrorTextStorage: error_text is NULL when a row has no language-neutral
-// message (no failure, or text of another program without a catalog key), in
-// tests and traces alike, and the JSON of the message otherwise. Readers see
-// NULL as "".
+// TestErrorTextStorage: error_text is NULL without a catalog message (none or foreign text),
+// else its JSON, in tests and traces alike; readers see NULL as "".
 func TestErrorTextStorage(t *testing.T) {
 	ctx := context.Background()
 	st := newTestStore(t)

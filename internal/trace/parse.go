@@ -1,6 +1,5 @@
-// Package trace führt Routenverfolgungen aus (tracert unter Windows,
-// traceroute sonst), ergänzt Standortdaten aus der GeoIP-Datenbank und
-// interpoliert fehlende Koordinaten.
+// Package trace runs route traces (tracert on Windows, traceroute elsewhere),
+// adds GeoIP locations and interpolates missing coordinates.
 package trace
 
 import (
@@ -16,20 +15,17 @@ var (
 	rttRe     = regexp.MustCompile(`(\d+(?:\.\d+)?)\s*ms\b`)
 )
 
-// rawHop ist eine geparste Hop-Zeile vor der Anreicherung.
+// rawHop is a parsed hop line before enrichment.
 type rawHop struct {
 	Number int
-	IP     string   // leer, wenn der Hop nicht geantwortet hat
-	RTTMs  *float64 // Mittelwert aller gemessenen Laufzeiten
+	IP     string   // empty if the hop did not answer
+	RTTMs  *float64 // mean of all measured RTTs
 }
 
-// parseHopLine wertet eine Zeile von tracert oder traceroute (jeweils ohne
-// Namensauflösung, -d bzw. -n) aus. ok ist false für Kopf- und Fußzeilen.
-//
-// Ein Hop gilt als beantwortet, sobald eine IP-Adresse in der Zeile steht –
-// unabhängig von der Sprache der Timeout-Meldung und auch bei teilweisen
-// Timeouts wie "12 ms  *  14 ms  1.2.3.4". Bei mehreren Adressen (Load
-// Balancing) zählt die erste. "<1 ms" wird als 1 ms gewertet.
+// parseHopLine parses a tracert/traceroute line (run with -d/-n); ok is false
+// for header and footer lines. Any IP marks the hop as answered, regardless of
+// the timeout text's language or partial timeouts; with load balancing the
+// first IP wins. "<1 ms" counts as 1 ms.
 func parseHopLine(line string) (h rawHop, ok bool) {
 	m := hopLineRe.FindStringSubmatch(line)
 	if m == nil {
@@ -60,7 +56,7 @@ func parseHopLine(line string) (h rawHop, ok bool) {
 	return h, true
 }
 
-// subnet24 liefert die ersten drei Oktette einer IPv4-Adresse ("1.2.3") oder "".
+// subnet24 returns the first three octets of an IPv4 address ("1.2.3") or "".
 func subnet24(ip string) string {
 	i := strings.LastIndexByte(ip, '.')
 	if i < 0 || strings.Count(ip, ".") != 3 {

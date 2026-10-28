@@ -2,15 +2,11 @@
 // Server message catalogs (German and English) and the language of a request
 // Version: 2026.10.28
 
-// Package i18n renders the messages the server sends to the web UI in the
-// language of the request.
+// Package i18n renders server messages for the web UI in the request language.
 //
-// Internally everything is English: errors (Error()), logs and stored texts.
-// Messages that reach the UI are built from catalog keys (E, Wrap, M) and
-// rendered by key in the request language (ErrorIn, Msg.In). Stored messages
-// (the last error of a test or trace) keep a language-neutral form next to the
-// English text, see Localize. Texts from other programs (iperf3, traceroute,
-// the operating system) have no key and are shown as they are.
+// Errors, logs and stored texts are English. UI messages are built from catalog keys
+// (E, Wrap, M) and rendered per request (ErrorIn, Msg.In); stored errors keep a
+// language-neutral form beside the English text (Localize). Foreign program output has no key.
 package i18n
 
 import (
@@ -28,16 +24,14 @@ const (
 	EN = "en"
 )
 
-// Default is the language of a request that names none. German, as in all
-// earlier versions of the API.
+// Default is the language when a request names none; German, as in earlier API versions.
 const Default = DE
 
 // Languages returns the supported language codes.
 func Languages() []string { return []string{DE, EN} }
 
-// FromRequest picks the language of a request: the query parameter "lang"
-// (EventSource cannot set headers), else the first entry of Accept-Language,
-// else Default. Anything that is not German counts as English.
+// FromRequest picks ?lang= (EventSource cannot set headers), else the first Accept-Language
+// entry, else Default; anything not German is English.
 func FromRequest(r *http.Request) string {
 	if l := r.URL.Query().Get("lang"); l != "" {
 		return normalize(l)
@@ -79,8 +73,7 @@ func mustLoad() map[string]map[string]string {
 	return out
 }
 
-// Lookup returns the text of key in lang, falling back to English. ok is
-// false when neither catalog has the key.
+// Lookup returns key's text in lang, falling back to English; ok is false if neither has it.
 func Lookup(lang, key string) (string, bool) {
 	if s, ok := catalogs[lang][key]; ok {
 		return s, true
@@ -89,8 +82,7 @@ func Lookup(lang, key string) (string, bool) {
 	return s, ok
 }
 
-// T returns the text of key in lang, formatted with args. An unknown key is
-// returned as it is.
+// T returns key's text in lang formatted with args; an unknown key is returned as is.
 func T(lang, key string, args ...any) string {
 	s, ok := Lookup(lang, key)
 	if !ok {

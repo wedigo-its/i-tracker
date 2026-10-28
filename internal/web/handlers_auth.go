@@ -15,10 +15,10 @@ import (
 	"i-tracker/internal/store"
 )
 
-// checkPassword prüft ein Passwort gegen einen Hash (in Tests ersetzbar).
+// checkPassword is replaceable in tests.
 var checkPassword = auth.CheckPassword
 
-// tooManyAttempts antwortet mit 429, wenn die Client-Adresse gesperrt ist.
+// tooManyAttempts answers 429 if the client address is blocked.
 func (s *Server) tooManyAttempts(w http.ResponseWriter, r *http.Request, addr string) bool {
 	if !s.limiter.Blocked(addr) {
 		return false
@@ -47,8 +47,7 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 		writeInternal(w, r, err)
 		return
 	}
-	// Auch bei unbekanntem Benutzer einen Argon2id-Hash prüfen, damit die
-	// Antwortzeit nicht verrät, ob es das Konto gibt.
+	// Hash even for unknown users so timing does not reveal whether the account exists.
 	hash := auth.DummyHash()
 	if u != nil {
 		hash = u.HashedPassword
@@ -64,7 +63,7 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, r, http.StatusBadRequest, errInactive)
 		return
 	}
-	// Ältere bcrypt-Hashes bei erfolgreicher Anmeldung transparent auf Argon2id umstellen.
+	// Upgrade legacy bcrypt hashes to Argon2id on successful sign-in.
 	if auth.NeedsRehash(u.HashedPassword) {
 		if hash, err := auth.HashPassword(req.Password); err == nil {
 			if err := s.store.SetPassword(r.Context(), u.ID, hash); err != nil {
@@ -87,8 +86,7 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 		writeInternal(w, r, err)
 		return
 	}
-	// Die Oberfläche nutzt das HttpOnly-Cookie; access_token bleibt für API-Clients
-	// (Authorization: Bearer) erhalten.
+	// The UI uses the HttpOnly cookie; access_token is for Bearer API clients.
 	setSessionCookie(w, r, token, s.tokens.TTL())
 	writeJSON(w, r, http.StatusOK, map[string]any{
 		"access_token": token,
@@ -98,15 +96,14 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// handleLogout beendet die Sitzung der Anfrage (Cookie oder Bearer-Token):
-// Ihre Kennung kommt bis zum spätestmöglichen Ablauf auf die Sperrliste, das
-// Cookie wird gelöscht. Ohne gültiges Token wird nur das Cookie gelöscht.
+// handleLogout revokes the request's session (cookie or Bearer) until its
+// latest possible expiry and clears the cookie.
 func (s *Server) handleLogout(w http.ResponseWriter, r *http.Request) {
 	if token, _ := sessionToken(r); token != "" {
 		if claims, err := s.tokens.Parse(token); err == nil {
-			// Verlängerte Tokens derselben Sitzung laufen spätestens jetzt + TTL ab.
+			// Renewed tokens of this session expire by now + TTL at the latest.
 			if !s.revoked.Revoke(claims.SessionID, time.Now().Add(s.tokens.TTL())) {
-				// Sperrliste voll: ersatzweise alle Sitzungen des Benutzers beenden.
+				// Revocation list full: end all of the user's sessions instead.
 				if u, err := s.store.UserByUsername(r.Context(), claims.Username); err == nil {
 					if _, err := s.store.BumpTokenVersion(r.Context(), u.ID); err != nil {
 						writeInternal(w, r, err)
@@ -120,8 +117,7 @@ func (s *Server) handleLogout(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
-// handleLogoutAll beendet alle Sitzungen des angemeldeten Benutzers auf allen
-// Geräten, auch Bearer-Tokens (Token-Version erhöhen).
+// handleLogoutAll ends all sessions of the user, Bearer tokens included, by bumping the token version.
 func (s *Server) handleLogoutAll(w http.ResponseWriter, r *http.Request, u *model.User) {
 	if _, err := s.store.BumpTokenVersion(r.Context(), u.ID); err != nil {
 		writeInternal(w, r, err)
@@ -132,11 +128,9 @@ func (s *Server) handleLogoutAll(w http.ResponseWriter, r *http.Request, u *mode
 	w.WriteHeader(http.StatusNoContent)
 }
 
-// handleAuthStatus liefert ohne Anmeldung den Zustand für die Anmeldeseite.
-// initial_pending ist true, solange der Admin noch das beim ersten Start
-// erzeugte Passwort hat; nur dann zeigt die Seite den Hinweis darauf.
-// public_read meldet, ob Gäste die Leseansicht ohne Anmeldung sehen
-// (auth.public_read); sonst zeigt die Oberfläche gleich die Anmeldung.
+// handleAuthStatus serves the sign-in page state without authentication.
+// initial_pending: admin still has the generated password (page shows a hint);
+// public_read: guests get the read-only view (auth.public_read).
 func (s *Server) handleAuthStatus(w http.ResponseWriter, r *http.Request) {
 	pending, err := s.initialPasswordPending(r.Context())
 	if err != nil {
@@ -146,8 +140,7 @@ func (s *Server) handleAuthStatus(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, r, http.StatusOK, map[string]any{"auth_enabled": true, "initial_pending": pending, "public_read": s.publicRead})
 }
 
-// handleMe liefert den angemeldeten Benutzer und im Header X-CSRF-Token das
-// CSRF-Token der Sitzung (nach einem Neuladen der Seite).
+// handleMe returns the user and, in X-CSRF-Token, the session's CSRF token (needed after a page reload).
 func (s *Server) handleMe(w http.ResponseWriter, r *http.Request, u *model.User) {
 	if token, _ := sessionToken(r); token != "" {
 		if claims, err := s.tokens.Parse(token); err == nil {
@@ -258,12 +251,8 @@ func (s *Server) handleDeleteUser(w http.ResponseWriter, r *http.Request, curren
 	writeJSON(w, r, http.StatusOK, map[string]string{"message": message(r, "msg.auth.user_deleted")})
 }
 
-// handleChangePassword ändert das Passwort des angemeldeten Benutzers. Das
-// aktuelle Passwort muss angegeben werden; ein falsches zählt als
-// Fehlversuch. Danach ist ein erzwungener Wechsel erledigt und alle anderen
-// Sitzungen des Benutzers sind beendet (Token-Version). Die eigene Sitzung
-// läuft mit einem neuen Token weiter: als Cookie und für API-Clients als
-// access_token in der Antwort.
+// handleChangePassword requires the current password (a wrong one counts as a
+// failed attempt), ends all other sessions and renews the caller's token.
 func (s *Server) handleChangePassword(w http.ResponseWriter, r *http.Request, u *model.User) {
 	addr := clientAddr(r)
 	if s.tooManyAttempts(w, r, addr) {
@@ -290,7 +279,7 @@ func (s *Server) handleChangePassword(w http.ResponseWriter, r *http.Request, u 
 		writeError(w, r, http.StatusUnprocessableEntity, "err.auth.password_same")
 		return
 	}
-	// Die Sitzung wurde in requireUserPending bereits geprüft.
+	// Session already validated by requireUserPending.
 	token, fromCookie := sessionToken(r)
 	claims, err := s.tokens.Parse(token)
 	if err != nil {

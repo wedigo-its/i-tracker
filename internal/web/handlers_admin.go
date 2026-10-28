@@ -134,8 +134,7 @@ func (s *Server) handlePublicServers(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, r, http.StatusOK, out)
 }
 
-// handleSearchPublicServers searches name and location (in German and
-// English) and provider, ignoring case.
+// handleSearchPublicServers searches name and location (all languages) and provider, ignoring case.
 func (s *Server) handleSearchPublicServers(w http.ResponseWriter, r *http.Request) {
 	q, ok := r.URL.Query()["query"]
 	if !ok {

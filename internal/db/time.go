@@ -6,19 +6,16 @@ import (
 	"time"
 )
 
-// Zeitstempel werden als TEXT in UTC mit fester Mikrosekunden-Genauigkeit
-// gespeichert. Das feste Format ist lexikografisch sortierbar, sodass
-// Datumsfilter direkt per Stringvergleich in SQL funktionieren.
+// Fixed-width UTC microseconds: sorts lexically, so SQL date filters can compare strings.
 const timeLayout = "2006-01-02T15:04:05.000000Z"
 
-// Now liefert die aktuelle Zeit in UTC, gekürzt auf die gespeicherte
-// Genauigkeit, damit API-Antworten vor und nach dem Speichern übereinstimmen.
+// Now is UTC truncated to stored precision, so API responses match before and after saving.
 func Now() time.Time { return time.Now().UTC().Truncate(time.Microsecond) }
 
-// FormatTime wandelt t in das Speicherformat um.
+// FormatTime formats t for storage.
 func FormatTime(t time.Time) string { return t.UTC().Format(timeLayout) }
 
-// FormatNullTime wandelt t in das Speicherformat um; nil ergibt NULL.
+// FormatNullTime formats t for storage; nil yields NULL.
 func FormatNullTime(t *time.Time) any {
 	if t == nil {
 		return nil
@@ -26,7 +23,7 @@ func FormatNullTime(t *time.Time) any {
 	return FormatTime(*t)
 }
 
-// Time liefert einen sql.Scanner für eine NOT-NULL-Zeitspalte.
+// Time scans a NOT NULL time column.
 func Time(dst *time.Time) sql.Scanner {
 	return scanner(func(t *time.Time) {
 		if t != nil {
@@ -35,7 +32,7 @@ func Time(dst *time.Time) sql.Scanner {
 	})
 }
 
-// NullTime liefert einen sql.Scanner für eine nullbare Zeitspalte; NULL ergibt nil.
+// NullTime scans a nullable time column; NULL yields nil.
 func NullTime(dst **time.Time) sql.Scanner {
 	return scanner(func(t *time.Time) { *dst = t })
 }
@@ -67,7 +64,7 @@ func (set scanner) Scan(src any) error {
 	return nil
 }
 
-// parseTime akzeptiert neben dem eigenen Format auch SQLites CURRENT_TIMESTAMP.
+// parseTime also accepts SQLite's CURRENT_TIMESTAMP.
 func parseTime(s string) (time.Time, error) {
 	for _, layout := range []string{timeLayout, time.RFC3339Nano, "2006-01-02 15:04:05.999999", "2006-01-02 15:04:05"} {
 		if t, err := time.Parse(layout, s); err == nil {

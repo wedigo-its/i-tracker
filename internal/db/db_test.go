@@ -8,9 +8,7 @@ import (
 	_ "modernc.org/sqlite"
 )
 
-// TestMigrateOldUsersTable öffnet eine Datenbank im Schema früherer Versionen
-// (ohne must_change_password und token_version) und prüft, dass die Spalten
-// ergänzt werden.
+// TestMigrateOldUsersTable checks that an old users table gains must_change_password and token_version.
 func TestMigrateOldUsersTable(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "alt.db")
 	old, err := sql.Open("sqlite", path)
@@ -40,7 +38,7 @@ func TestMigrateOldUsersTable(t *testing.T) {
 	if err := conn.QueryRow(`SELECT token_version FROM users WHERE username = 'a'`).Scan(&version); err != nil || version != 0 {
 		t.Fatalf("token_version = %v, %v", version, err)
 	}
-	// Ein zweites Öffnen darf die Spalte nicht erneut anlegen wollen.
+	// Reopening must not try to add the columns again.
 	conn.Close()
 	conn2, err := Open(path)
 	if err != nil {

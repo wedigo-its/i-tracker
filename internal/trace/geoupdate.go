@@ -21,36 +21,35 @@ import (
 	"time"
 )
 
-// Download-Adressen der Datenbanken.
+// Database download URLs.
 const (
-	// DB-IP City Lite erscheint monatlich; %s ist der Monat (YYYY-MM).
+	// DB-IP City Lite is released monthly; %s is the month (YYYY-MM).
 	DBIPURLFormat = "https://download.db-ip.com/free/dbip-city-lite-%s.mmdb.gz"
-	// MaxMind GeoLite2 City als tar.gz; Prüfsumme unter suffix=tar.gz.sha256.
+	// MaxMind GeoLite2 City as tar.gz; checksum at suffix=tar.gz.sha256.
 	MaxMindURL = "https://download.maxmind.com/geoip/databases/GeoLite2-City/download?suffix=tar.gz"
 )
 
-// maxDatabaseSize begrenzt die entpackte Datenbank, damit eine fehlerhafte
-// Antwort nicht die Platte füllt (DB-IP City Lite hat rund 130 MB).
+// maxDatabaseSize caps the unpacked database so a bad response cannot fill the
+// disk (DB-IP City Lite is about 130 MB).
 const maxDatabaseSize = 1 << 30
 
-// staleAfter ist das Alter, ab dem eine MaxMind-Datenbank auch ohne
-// Last-Modified-Angabe neu geladen wird (MaxMind aktualisiert zweimal pro Woche).
+// staleAfter is the age after which a MaxMind database without Last-Modified is
+// re-downloaded (MaxMind updates twice a week).
 const staleAfter = 7 * 24 * time.Hour
 
-// GeoUpdater lädt die GeoIP-Datenbank herunter und hält sie aktuell. Ohne
-// MaxMind-Zugangsdaten nutzt er DB-IP City Lite (kein Account nötig), mit
-// Zugangsdaten MaxMind GeoLite2 City.
+// GeoUpdater downloads the GeoIP database and keeps it current: DB-IP City Lite
+// without MaxMind credentials (no account needed), MaxMind GeoLite2 City with.
 type GeoUpdater struct {
 	Geo  *GeoIP
-	Path string // Ablageort der Datenbank
+	Path string // database file location
 
-	// MaxMind-Zugang (optional, beide oder keiner).
+	// MaxMind credentials (optional, both or neither).
 	AccountID, LicenseKey string
 
 	Client    *http.Client
 	UserAgent string
 
-	// Für Tests austauschbar.
+	// Replaceable in tests.
 	DBIPURLFormat string
 	MaxMindURL    string
 	Now           func() time.Time
@@ -61,7 +60,7 @@ type GeoUpdater struct {
 	updating atomic.Bool
 }
 
-// Source liefert die gewünschte Herkunft der Datenbank.
+// Source returns the wanted database source.
 func (u *GeoUpdater) Source() string {
 	if u.AccountID != "" && u.LicenseKey != "" {
 		return SourceMaxMind
@@ -69,10 +68,10 @@ func (u *GeoUpdater) Source() string {
 	return SourceDBIP
 }
 
-// Updating meldet, ob gerade ein Download läuft.
+// Updating reports whether a download is running.
 func (u *GeoUpdater) Updating() bool { return u != nil && u.updating.Load() }
 
-// Run prüft sofort und danach im Abstand interval, bis ctx endet.
+// Run checks now and then every interval until ctx ends.
 func (u *GeoUpdater) Run(ctx context.Context, interval time.Duration) {
 	for {
 		if err := u.Check(ctx); err != nil && ctx.Err() == nil {
@@ -86,9 +85,8 @@ func (u *GeoUpdater) Run(ctx context.Context, interval time.Duration) {
 	}
 }
 
-// Check lädt die Datenbank, wenn sie fehlt, veraltet ist oder die Herkunft
-// wechseln soll. Eine von Hand abgelegte MaxMind-Datenbank wird ohne
-// MaxMind-Zugang nicht durch DB-IP ersetzt.
+// Check downloads the database if missing, outdated or the source changes.
+// A manually placed MaxMind database is not replaced by DB-IP without credentials.
 func (u *GeoUpdater) Check(ctx context.Context) error {
 	u.defaults()
 	want := u.Source()
@@ -116,7 +114,7 @@ func (u *GeoUpdater) Check(ctx context.Context) error {
 	if lastMod.IsZero() {
 		lastMod = u.Now()
 	}
-	// Die Änderungszeit merkt sich den Stand der Quelle für den nächsten Abgleich.
+	// The mtime records the source's release for the next check.
 	os.Chtimes(u.Path, lastMod, lastMod)
 	slog.Info("GeoIP database updated", "source", want, "path", u.Path)
 	return nil
@@ -152,9 +150,8 @@ func (u *GeoUpdater) defaults() {
 	}
 }
 
-// latest ermittelt die aktuelle Download-Adresse und, falls bekannt, deren
-// Stand (Last-Modified). Die HEAD-Anfrage zählt bei MaxMind nicht gegen das
-// tägliche Download-Limit.
+// latest returns the current download URL and, if known, its Last-Modified.
+// MaxMind does not count HEAD requests against the daily download limit.
 func (u *GeoUpdater) latest(ctx context.Context, source string) (string, time.Time, error) {
 	if source == SourceMaxMind {
 		res, err := u.request(ctx, http.MethodHead, u.MaxMindURL, false)
@@ -168,8 +165,7 @@ func (u *GeoUpdater) latest(ctx context.Context, source string) (string, time.Ti
 		lastMod, _ := http.ParseTime(res.Header.Get("Last-Modified"))
 		return u.MaxMindURL, lastMod, nil
 	}
-	// Die Ausgabe des laufenden Monats erscheint erst im Lauf des Monats;
-	// bis dahin gilt die des Vormonats.
+	// The current month's release appears mid-month; until then use last month's.
 	now := u.Now().UTC()
 	for _, month := range []time.Time{now, now.AddDate(0, 0, -now.Day())} {
 		url := fmt.Sprintf(u.DBIPURLFormat, month.Format("2006-01"))
@@ -189,7 +185,7 @@ func (u *GeoUpdater) latest(ctx context.Context, source string) (string, time.Ti
 	return "", time.Time{}, errors.New("no DB-IP release found for this or the previous month")
 }
 
-// newer meldet, ob die Quelle neuer ist als die abgelegte Datei.
+// newer reports whether the source is newer than the stored file.
 func (u *GeoUpdater) newer(source string, lastMod time.Time) bool {
 	fi, err := os.Stat(u.Path)
 	if err != nil {
@@ -201,8 +197,8 @@ func (u *GeoUpdater) newer(source string, lastMod time.Time) bool {
 	return lastMod.After(fi.ModTime().Add(time.Second))
 }
 
-// download lädt die Datenbank in eine temporäre Datei neben Path, prüft sie
-// und ersetzt dann die bisherige Datei.
+// download fetches the database into a temp file next to Path, verifies it and
+// then replaces the current file.
 func (u *GeoUpdater) download(ctx context.Context, source, url string) error {
 	if err := os.MkdirAll(filepath.Dir(u.Path), 0o755); err != nil {
 		return err
@@ -212,7 +208,7 @@ func (u *GeoUpdater) download(ctx context.Context, source, url string) error {
 		return err
 	}
 	tmpName := tmp.Name()
-	defer os.Remove(tmpName) // nach erfolgreichem Austausch existiert sie nicht mehr
+	defer os.Remove(tmpName) // gone after a successful replace
 
 	res, err := u.request(ctx, http.MethodGet, url, source == SourceDBIP)
 	if err != nil {
@@ -233,7 +229,7 @@ func (u *GeoUpdater) download(ctx context.Context, source, url string) error {
 		err = gunzipTo(body, tmp)
 	}
 	if err == nil {
-		// Rest der Antwort lesen, damit die Prüfsumme die ganze Datei abdeckt.
+		// Drain the rest so the checksum covers the whole file.
 		_, err = io.Copy(io.Discard, body)
 	}
 	if cerr := tmp.Close(); err == nil {
@@ -253,7 +249,7 @@ func (u *GeoUpdater) download(ctx context.Context, source, url string) error {
 	return u.install(tmpName, u.Path)
 }
 
-// verifyMaxMind vergleicht die SHA-256-Summe des Archivs mit der von MaxMind.
+// verifyMaxMind compares the archive's SHA-256 with MaxMind's.
 func (u *GeoUpdater) verifyMaxMind(ctx context.Context, sum hash.Hash) error {
 	res, err := u.request(ctx, http.MethodGet, strings.Replace(u.MaxMindURL, "suffix=tar.gz", "suffix=tar.gz.sha256", 1), false)
 	if err != nil {
@@ -274,9 +270,8 @@ func (u *GeoUpdater) verifyMaxMind(ctx context.Context, sum hash.Hash) error {
 	return nil
 }
 
-// request sendet eine Anfrage; MaxMind-Anfragen tragen die Zugangsdaten.
-// Weiterleitungen auf einen anderen Host (MaxMind leitet auf einen
-// Speicherdienst weiter) verlieren den Authorization-Header automatisch.
+// request sends a request, with credentials for MaxMind. Redirects to another
+// host (MaxMind redirects to storage) drop the Authorization header automatically.
 func (u *GeoUpdater) request(ctx context.Context, method, url string, anonymous bool) (*http.Response, error) {
 	req, err := http.NewRequestWithContext(ctx, method, url, nil)
 	if err != nil {
@@ -291,7 +286,7 @@ func (u *GeoUpdater) request(ctx context.Context, method, url string, anonymous 
 	return u.Client.Do(req)
 }
 
-// gunzipTo entpackt einen gzip-Strom nach w.
+// gunzipTo unpacks a gzip stream into w.
 func gunzipTo(r io.Reader, w io.Writer) error {
 	zr, err := gzip.NewReader(r)
 	if err != nil {
@@ -303,7 +298,7 @@ func gunzipTo(r io.Reader, w io.Writer) error {
 	return zr.Close()
 }
 
-// extractTarMMDB schreibt die .mmdb-Datei aus einem tar.gz-Archiv nach w.
+// extractTarMMDB writes the .mmdb file from a tar.gz archive to w.
 func extractTarMMDB(r io.Reader, w io.Writer) error {
 	zr, err := gzip.NewReader(r)
 	if err != nil {
@@ -335,8 +330,7 @@ func copyLimited(w io.Writer, r io.Reader) error {
 	return nil
 }
 
-// sameFile vergleicht zwei Pfade (unter Windows ohne Rücksicht auf Groß- und
-// Kleinschreibung).
+// sameFile compares two paths (case-insensitive on Windows).
 func sameFile(a, b string) bool {
 	if a == "" || b == "" {
 		return false

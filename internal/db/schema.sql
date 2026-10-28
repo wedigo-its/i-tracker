@@ -1,6 +1,4 @@
--- Schema des i-Trackers.
--- Enums werden als lowercase TEXT gespeichert, Zeitstempel als TEXT in UTC
--- (Format siehe time.go).
+-- i-Tracker schema. Enums are lowercase TEXT, timestamps UTC TEXT (format: time.go).
 
 CREATE TABLE IF NOT EXISTS users (
     id              INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -12,8 +10,7 @@ CREATE TABLE IF NOT EXISTS users (
     created_at      TEXT    NOT NULL,
     last_login      TEXT,
     must_change_password BOOLEAN NOT NULL DEFAULT 0,
-    -- Wird bei Passwortwechsel und „überall abmelden“ erhöht; Sitzungs-Tokens
-    -- mit älterer Version (Claim "ver") sind damit ungültig.
+    -- Bumped on password change and "sign out everywhere"; tokens with an older "ver" claim become invalid.
     token_version   INTEGER NOT NULL DEFAULT 0
 );
 
@@ -31,7 +28,7 @@ CREATE TABLE IF NOT EXISTS servers (
                               CHECK (default_protocol IN ('tcp', 'udp')),
     default_direction         TEXT    NOT NULL DEFAULT 'download'
                               CHECK (default_direction IN ('download', 'upload', 'bidirectional')),
-    -- Zielbandbreite für UDP-Tests in Mbit/s; NULL = iperf3-Standard (1 Mbit/s).
+    -- UDP target bandwidth in Mbit/s; NULL = iperf3 default (1 Mbit/s).
     default_udp_bandwidth_mbps REAL,
     schedule_enabled          BOOLEAN NOT NULL DEFAULT 0,
     schedule_interval_minutes INTEGER NOT NULL DEFAULT 30,
@@ -72,7 +69,7 @@ CREATE TABLE IF NOT EXISTS tests (
 CREATE INDEX IF NOT EXISTS idx_tests_server_id  ON tests(server_id);
 CREATE INDEX IF NOT EXISTS idx_tests_created_at ON tests(created_at);
 
--- test_id ist nullable: Traces können auch ohne Test (Live-/Einzel-Trace) existieren.
+-- test_id is nullable: live and standalone traces have no test.
 CREATE TABLE IF NOT EXISTS traces (
     id               INTEGER PRIMARY KEY AUTOINCREMENT,
     test_id          INTEGER REFERENCES tests(id) ON DELETE CASCADE,

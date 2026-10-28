@@ -7,12 +7,11 @@ import (
 	"strings"
 )
 
-// EnvPrefix ist das Präfix aller Umgebungsvariablen.
+// EnvPrefix prefixes all environment variables.
 const EnvPrefix = "IPERF3_"
 
-// legacyEnv ordnet die früheren Variablennamen ohne Präfix ihrem Schlüssel
-// zu. Sie gelten weiter, erzeugen aber eine Warnung im Log. Ist auch der neue
-// Name gesetzt, gewinnt dieser.
+// legacyEnv maps old unprefixed names to their key; still honoured with a
+// log warning, the new name wins if both are set.
 var legacyEnv = []struct{ name, key string }{
 	{"LISTEN_ADDR", "web.listen"},
 	{"DB_PATH", "storage.path"},
@@ -24,18 +23,18 @@ var legacyEnv = []struct{ name, key string }{
 	{"LOG_LEVEL", "log.level"},
 }
 
-// EnvName liefert den Variablennamen zu einem Schlüssel wie "web.listen".
+// EnvName returns the variable name for a key like "web.listen".
 func EnvName(key string) string {
 	return EnvPrefix + strings.ToUpper(strings.ReplaceAll(key, ".", "_"))
 }
 
-// envField ist ein per Umgebung setzbarer Konfigurationswert.
+// envField is a config value settable via the environment.
 type envField struct {
-	key string // "abschnitt.schlüssel"
+	key string // "section.key"
 	val reflect.Value
 }
 
-// envFields listet alle Schlüssel der Konfiguration in Dateireihenfolge.
+// envFields lists all config keys in file order.
 func (c *Config) envFields() []envField {
 	var out []envField
 	root := reflect.ValueOf(c).Elem()
@@ -64,7 +63,7 @@ func yamlName(f reflect.StructField) (string, bool) {
 	return tag, true
 }
 
-// EnvKeys liefert alle Variablennamen (für Doku und Tests).
+// EnvKeys returns all variable names (for docs and tests).
 func EnvKeys() []string {
 	var c Config
 	var out []string
@@ -74,8 +73,7 @@ func EnvKeys() []string {
 	return out
 }
 
-// KeyInfo beschreibt einen Konfigurationsschlüssel für die Produktdokumentation
-// (i-tracker reference): Schlüssel, Typ, eingebauter Standardwert und Umgebungsvariable.
+// KeyInfo describes a config key for the product docs (i-tracker reference).
 type KeyInfo struct {
 	Key     string `json:"key"`
 	Type    string `json:"type"`
@@ -83,7 +81,7 @@ type KeyInfo struct {
 	Env     string `json:"env"`
 }
 
-// Reference listet alle Konfigurationsschlüssel mit ihren eingebauten Standardwerten.
+// Reference lists all config keys with their built-in defaults.
 func Reference() []KeyInfo {
 	var out []KeyInfo
 	for _, f := range defaults().envFields() {
@@ -92,8 +90,8 @@ func Reference() []KeyInfo {
 	return out
 }
 
-// applyEnv überschreibt Werte aus der Umgebung: zuerst die veralteten
-// Aliase, danach die neuen Namen, die damit Vorrang haben.
+// applyEnv applies the environment: deprecated aliases first, then the new
+// names, which thus take precedence.
 func (c *Config) applyEnv(lookup func(string) (string, bool)) error {
 	fields := map[string]envField{}
 	for _, f := range c.envFields() {

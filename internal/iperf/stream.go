@@ -7,24 +7,24 @@ import (
 	"i-tracker/internal/model"
 )
 
-// Ausgabe von `iperf3 --json-stream` (ab iperf 3.17): eine JSON-Zeile je
-// Ereignis ("start", "interval", "end", "error").
+// `iperf3 --json-stream` output (iperf 3.17+): one JSON line per event
+// ("start", "interval", "end", "error").
 //
-// Richtungen aus Sicht des Clients: Ohne -R sendet der Client (Upload), mit -R
-// sendet der Server (Download). Bei --bidir beschreiben sum/sum_sent/
-// sum_received den Upload und die *_bidir_reverse-Felder den Download.
+// Directions are client-side: without -R the client sends (upload), with -R the
+// server sends (download). With --bidir, sum/sum_sent/sum_received describe the
+// upload and the *_bidir_reverse fields the download.
 
 type event struct {
 	Event string          `json:"event"`
 	Data  json.RawMessage `json:"data"`
 }
 
-// summary ist eine Summenzeile über alle Streams einer Richtung.
+// summary is a sum over all streams of one direction.
 type summary struct {
 	Bytes         int64    `json:"bytes"`
 	BitsPerSecond float64  `json:"bits_per_second"`
-	Retransmits   *int64   `json:"retransmits"` // nur TCP, nur beim Sender und nicht auf allen Plattformen
-	JitterMs      *float64 `json:"jitter_ms"`   // nur UDP
+	Retransmits   *int64   `json:"retransmits"` // TCP sender only, not on all platforms
+	JitterMs      *float64 `json:"jitter_ms"`   // UDP only
 	LostPercent   *float64 `json:"lost_percent"`
 }
 
@@ -43,13 +43,13 @@ type endData struct {
 	} `json:"cpu_utilization_percent"`
 }
 
-// Rates sind die aktuellen Bitraten eines Intervalls in Mbit/s; nil = keine Angabe.
+// Rates are an interval's current bit rates in Mbit/s; nil = not reported.
 type Rates struct {
 	DownloadMbps *float64
 	UploadMbps   *float64
 }
 
-// intervalRates ordnet ein Intervall-Ereignis Download und Upload zu.
+// intervalRates maps an interval event to download and upload.
 func intervalRates(d intervalData, dir model.Direction) Rates {
 	var r Rates
 	switch dir {
@@ -64,8 +64,8 @@ func intervalRates(d intervalData, dir model.Direction) Rates {
 	return r
 }
 
-// endResult wandelt das Abschluss-Ereignis in Messwerte um. ok ist false,
-// wenn für die geforderte Richtung keine Summen vorliegen.
+// endResult converts the end event into results; ok is false if the requested
+// direction has no sums.
 func endResult(d endData, dir model.Direction) (r model.TestResult, ok bool) {
 	var retrans []*int64
 	switch dir {
@@ -97,8 +97,8 @@ func endResult(d endData, dir model.Direction) (r model.TestResult, ok bool) {
 	return r, ok
 }
 
-// setFlow übernimmt die Werte einer Richtung. Maßgeblich ist die
-// Empfängerseite, also das tatsächlich übertragene Volumen.
+// setFlow sets one direction's values, preferring the receiver side (the
+// volume actually transferred).
 func setFlow(bw **float64, bytes **int64, jitter, loss **float64, sent, received *summary) bool {
 	s := received
 	if s == nil {

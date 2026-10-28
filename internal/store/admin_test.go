@@ -21,7 +21,7 @@ func TestCleanupAndDatabaseStats(t *testing.T) {
 		}
 		return sv
 	}
-	// mkTest legt einen Test mit Trace (2 Hops) an, age Tage alt.
+	// mkTest creates a test with a 2-hop trace, age days old.
 	mkTest := func(sv *model.Server, age int) int64 {
 		test := &model.Test{ServerID: sv.ID, Protocol: model.ProtocolTCP, Direction: model.DirectionDownload, Duration: 1, ParallelStreams: 1}
 		if err := st.CreateTest(ctx, test); err != nil {
@@ -41,7 +41,7 @@ func TestCleanupAndDatabaseStats(t *testing.T) {
 	mkTest(a, 1)
 	mkTest(b, 40)
 	mkTest(b, 1)
-	// Live-Trace ohne Test, 40 Tage alt.
+	// Live trace without a test, 40 days old.
 	live := &model.Trace{DestinationHost: "x", Hops: []model.TraceHop{{HopNumber: 1}}}
 	st.CreateTrace(ctx, live)
 	st.db.Exec(`UPDATE traces SET created_at = ? WHERE id = ?`, db.FormatTime(time.Now().AddDate(0, 0, -40)), live.ID)
@@ -55,26 +55,26 @@ func TestCleanupAndDatabaseStats(t *testing.T) {
 		t.Errorf("DatabaseStats: %+v", ds)
 	}
 
-	// Alte Tests von Server a: ein Test, sein Trace folgt per Cascade.
+	// Old tests of server a: one test; its trace cascades.
 	before := time.Now().AddDate(0, 0, -30)
 	if n, err := st.DeleteTests(ctx, &before, &a.ID); err != nil || n != 1 {
-		t.Fatalf("DeleteTests(alt, a) = %d, %v", n, err)
+		t.Fatalf("DeleteTests(old, a) = %d, %v", n, err)
 	}
 	if ds, _ := st.DatabaseStats(ctx); ds.TotalTests != 3 || ds.TotalTraces != 4 || ds.TotalHops != 7 {
-		t.Errorf("nach Test-Bereinigung: %+v", ds)
+		t.Errorf("after test cleanup: %+v", ds)
 	}
 
-	// Alte Traces: der von Server b und der Live-Trace (ohne started_at).
+	// Old traces: server b's and the live trace (no started_at).
 	if tr, hops, err := st.DeleteTraces(ctx, &before); err != nil || tr != 2 || hops != 3 {
-		t.Fatalf("DeleteTraces(alt) = %d Traces, %d Hops, %v", tr, hops, err)
+		t.Fatalf("DeleteTraces(old) = %d traces, %d hops, %v", tr, hops, err)
 	}
 	if tr, hops, err := st.DeleteTraces(ctx, nil); err != nil || tr != 2 || hops != 4 {
-		t.Fatalf("DeleteTraces(alle) = %d Traces, %d Hops, %v", tr, hops, err)
+		t.Fatalf("DeleteTraces(all) = %d traces, %d hops, %v", tr, hops, err)
 	}
 	if n, err := st.DeleteTests(ctx, nil, nil); err != nil || n != 3 {
-		t.Fatalf("DeleteTests(alle) = %d, %v", n, err)
+		t.Fatalf("DeleteTests(all) = %d, %v", n, err)
 	}
 	if ds, _ := st.DatabaseStats(ctx); ds.TotalTests != 0 || ds.OldestTest != nil || ds.TotalServers != 2 {
-		t.Errorf("leer: %+v", ds)
+		t.Errorf("empty: %+v", ds)
 	}
 }

@@ -1,13 +1,11 @@
-// Command i-tracker-demo erzeugt eine erfundene Messumgebung mit 30 Tagen
-// Verlauf und startet darauf die echte Oberfläche – ohne echte Messungen.
-// Gedacht für Screenshots und Vorführungen. Alle Hosts liegen in
-// Dokumentationsbereichen (example.net, 192.0.2.0/24, 198.51.100.0/24,
+// Command i-tracker-demo seeds a fictional setup with 30 days of history and
+// serves the real UI on it without measuring, for screenshots and demos. All
+// hosts use documentation ranges (example.net, 192.0.2.0/24, 198.51.100.0/24,
 // 203.0.113.0/24, ASN 64496–64511).
 //
 //	go run ./cmd/i-tracker-demo -db demo.db -listen 127.0.0.1:8098
 //
-// Anmeldung: admin / demo-password (ohne Anmeldung zeigt die Oberfläche die
-// Gastansicht).
+// Sign-in: admin / demo-password (guest view without sign-in).
 package main
 
 import (
@@ -85,13 +83,13 @@ func main() {
 	tracer := trace.NewTracer(geo)
 	runner := iperf.NewRunner(st, iperf.FindBinary(""))
 	defer runner.Stop()
-	runner.Prepare("", false) // meldet iperf3 als verfügbar, wenn installiert
+	runner.Prepare("", false) // reports iperf3 as available if installed
 	srv := web.NewServer(web.Deps{
 		Store:      st,
 		Tokens:     auth.NewTokens("demo-secret-not-for-production-0123456789", 12*time.Hour),
 		Runner:     runner,
 		Tracer:     tracer,
-		Scheduler:  scheduler.New(st, runner, tracer), // nicht gestartet: keine echten Messungen
+		Scheduler:  scheduler.New(st, runner, tracer), // not started: no real measurements
 		GeoIP:      geo.Info,
 		PublicRead: true,
 	})
@@ -111,27 +109,27 @@ func fail(err error) {
 	os.Exit(1)
 }
 
-// --- Demo-Umgebung -----------------------------------------------------------
+// --- Demo setup --------------------------------------------------------------
 
-// hop ist ein Knoten auf dem Weg zur Gegenstelle.
+// hop is a node on the path to the server.
 type hop struct {
 	ip, host, city, country, cc string
 	lat, lon                    float64
 	asn                         int64
 	org                         string
 	rtt                         float64
-	silent                      bool // antwortet nicht (* * *)
-	estimated                   bool // Position von Nachbarn übernommen
+	silent                      bool // no reply (* * *)
+	estimated                   bool // position taken from neighbours
 }
 
-// profile beschreibt eine Gegenstelle und ihr Verhalten.
+// profile describes a server and its behaviour.
 type profile struct {
 	settings       model.ServerSettings
-	down, up       float64 // typischer Durchsatz in Mbit/s
-	eveningDrop    float64 // Anteil, der abends (19–23 Uhr) wegfällt
-	jitter, loss   float64 // nur UDP
-	failNight      int     // Tage zurück, an denen die Gegenstelle nachts ausfiel (0 = nie)
-	route, detour  []hop   // aktueller Weg und früherer Umweg (optional)
+	down, up       float64 // typical throughput in Mbit/s
+	eveningDrop    float64 // share lost in the evening (19–23 h)
+	jitter, loss   float64 // UDP only
+	failNight      int     // days back when the server failed at night (0 = never)
+	route, detour  []hop   // current path and earlier detour (optional)
 	detourDaysBack int
 }
 
@@ -191,7 +189,7 @@ type demo struct {
 
 func (d *demo) jitter(spread float64) float64 { return 1 + (d.rnd.Float64()*2-1)*spread }
 
-// seedServer legt den Server an und erzeugt seine Tests im Intervall.
+// seedServer creates the server and its tests at its interval.
 func (d *demo) seedServer(ctx context.Context, p profile, start, end time.Time) (int, error) {
 	sv := &model.Server{ServerSettings: p.settings}
 	if err := d.st.CreateServer(ctx, sv); err != nil {
@@ -230,7 +228,7 @@ func (d *demo) seedServer(ctx context.Context, p profile, start, end time.Time) 
 		if status == model.StatusCompleted {
 			last = test
 		}
-		// Ein Trace aus der Zeit des früheren Umwegs zeigt den Routenwechsel.
+		// A trace from the detour period shows the route change.
 		if p.detour != nil && age > time.Duration(p.detourDaysBack)*24*time.Hour && age <= time.Duration(p.detourDaysBack)*24*time.Hour+step {
 			if err := d.addTrace(ctx, test, p.settings.Host, p.detour, done); err != nil {
 				return count, err
@@ -246,14 +244,14 @@ func (d *demo) seedServer(ctx context.Context, p profile, start, end time.Time) 
 	return count, nil
 }
 
-// result liefert plausible Messwerte: tagsüber nahe am Normalwert, abends
-// mit optionalem Peering-Engpass, gelegentlich ein Ausreißer.
+// result returns plausible values: near normal by day, an optional evening
+// peering bottleneck, occasional outliers.
 func (d *demo) result(p profile, test *model.Test, t time.Time) model.TestResult {
 	local := t.Local()
 	h := float64(local.Hour()) + float64(local.Minute())/60
 	load := 1.0
 	if p.eveningDrop > 0 && h >= 19 && h < 23.5 {
-		// Glocke um 21 Uhr: so sieht ein überlasteter Austauschknoten aus.
+		// Bell curve around 21 h, like an overloaded exchange point.
 		load -= p.eveningDrop * math.Exp(-math.Pow((h-21.2)/1.3, 2))
 	}
 	if d.rnd.Float64() < .03 {
@@ -291,7 +289,7 @@ func (d *demo) result(p profile, test *model.Test, t time.Time) model.TestResult
 	return r
 }
 
-// addTrace speichert einen Traceroute zum Test mit leicht gestreuten Laufzeiten.
+// addTrace stores a traceroute for the test with slightly scattered RTTs.
 func (d *demo) addTrace(ctx context.Context, test *model.Test, host string, route []hop, at time.Time) error {
 	str := func(s string) *string {
 		if s == "" {

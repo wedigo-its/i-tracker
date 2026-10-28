@@ -1,12 +1,11 @@
 'use strict';
 
-// ---------- Sprachen ----------
+// ---------- Languages ----------
 
-// STRINGS hält je Schlüssel die deutsche und die englische Fassung. Platzhalter
-// in geschweiften Klammern ({name}) ersetzt t() aus dem übergebenen Objekt.
+// STRINGS maps each key to [de, en]; t() fills {name} placeholders from vars.
 const LANGS = ['de', 'en'];
 const STRINGS = {
-  // Allgemein
+  // General
   'cancel':               ['Abbrechen', 'Cancel'],
   'close':                ['Schließen', 'Close'],
   'save':                 ['Speichern', 'Save'],
@@ -17,11 +16,11 @@ const STRINGS = {
   'lang.choose':          ['Sprache wählen', 'Choose language'],
   'lang.label':           ['Sprache', 'Language'],
 
-  // Quellenhinweise der Karte
+  // Map attributions
   'map.dataBy':           ['Kartendaten: {src}', 'Map data: {src}'],
   'map.osmContributors':  ['{osm}-Mitwirkende', '{osm} contributors'],
 
-  // Anmeldung und Benutzermenü
+  // Login and user menu
   'login.user':           ['Benutzername', 'Username'],
   'login.pass':           ['Passwort', 'Password'],
   'login.submit':         ['Anmelden', 'Sign in'],
@@ -37,7 +36,7 @@ const STRINGS = {
   'user.changePassword':  ['Passwort ändern', 'Change password'],
   'user.logout':          ['Abmelden', 'Sign out'],
 
-  // Gastansicht (auth.public_read)
+  // Guest view (auth.public_read)
   'guest.name':           ['Gast', 'Guest'],
   'guest.badge':          ['Nur Lesen', 'Read-only'],
   'guest.badgeTitle':     ['Gastansicht ohne Anmeldung – Änderungen erst nach dem Anmelden',
@@ -47,7 +46,7 @@ const STRINGS = {
   'guest.back':           ['Ohne Anmeldung ansehen', 'Continue without signing in'],
   'guest.noTestHint':     ['Laufende Tests erscheinen hier automatisch.', 'Running tests appear here automatically.'],
 
-  // Kopfzeile
+  // Header
   'nav.dashboard':        ['Dashboard', 'Dashboard'],
   'nav.tests':            ['Tests', 'Tests'],
   'nav.peering':          ['Peering-Map', 'Peering map'],
@@ -80,7 +79,7 @@ const STRINGS = {
   'status.titleOk':       ['Status: OK', 'Status: OK'],
   'status.down':          ['Dienst nicht erreichbar', 'Service unreachable'],
 
-  // iperf3-Installation
+  // iperf3 installation
   'setup.installed':      ['iperf3 {version} installiert – Tests können jetzt laufen.', 'iperf3 {version} installed – tests can run now.'],
   'setup.failed':         ['iperf3-Installation fehlgeschlagen: {msg}', 'iperf3 installation failed: {msg}'],
   'setup.missingUser':    ['iperf3 ist auf dem Server nicht verfügbar – Tests schlagen fehl. Bitte einen Administrator informieren.',
@@ -92,7 +91,7 @@ const STRINGS = {
   'setup.started':        ['iperf3 wird installiert – das kann einige Minuten dauern …', 'Installing iperf3 – this may take a few minutes …'],
   'setup.impossible':     ['Installation nicht möglich: {msg}', 'Installation not possible: {msg}'],
 
-  // Gemeinsame Begriffe
+  // Shared terms
   'dir.download':         ['Download', 'Download'],
   'dir.upload':           ['Upload', 'Upload'],
   'dir.bidirectional':    ['Bidirektional', 'Bidirectional'],
@@ -225,7 +224,7 @@ const STRINGS = {
                            'Test #{id} against “{name}” will be permanently deleted along with its traces.'],
   'tests.deleted':        ['Test #{id} gelöscht', 'Test #{id} deleted'],
 
-  // Peering-Map
+  // Peering map
   'peering.start':        ['Traceroute starten', 'Start traceroute'],
   'peering.abort':        ['Abbrechen', 'Cancel'],
   'peering.saved':        ['Gespeicherte Traces', 'Saved traces'],
@@ -277,7 +276,7 @@ const STRINGS = {
   'peering.deleteText':   ['Der Trace wird mit allen Hops endgültig gelöscht.', 'The trace will be permanently deleted along with all its hops.'],
   'peering.deleted':      ['Trace gelöscht', 'Trace deleted'],
 
-  // Passwort
+  // Password
   'pw.current':           ['Aktuelles Passwort', 'Current password'],
   'pw.new':               ['Neues Passwort (mind. 8 Zeichen)', 'New password (at least 8 characters)'],
   'pw.repeat':            ['Neues Passwort wiederholen', 'Repeat new password'],
@@ -286,7 +285,7 @@ const STRINGS = {
   'pw.tooShort':          ['Das Passwort muss mindestens {n} Zeichen lang sein.', 'The password must be at least {n} characters long.'],
   'pw.changed':           ['Passwort geändert', 'Password changed'],
 
-  // Administration
+  // Admin
   'admin.users':          ['Benutzer', 'Users'],
   'admin.addUser':        ['+ Benutzer anlegen', '+ Create user'],
   'admin.username':       ['Benutzername', 'Username'],
@@ -338,12 +337,10 @@ const STRINGS = {
   'admin.tracesDeleted':  ['{traces} Trace(s) und {hops} Hop(s) gelöscht', '{traces} trace(s) and {hops} hop(s) deleted'],
 };
 
-// LANG_KEY ist der gemeinsame localStorage-Schlüssel der wedigo-Produkte.
+// LANG_KEY is the localStorage key shared by all wedigo products.
 const LANG_KEY = 'wedigo-lang';
 
-// detectLang wählt die gespeicherte Sprache, sonst die erste unterstützte
-// Browsersprache, sonst Deutsch. Der frühere Schlüssel "iperf-lang" wird
-// einmalig übernommen.
+// detectLang: saved choice, else first supported browser language, else German; migrates "iperf-lang" once.
 function detectLang() {
   let saved = null;
   try {
@@ -364,7 +361,7 @@ function detectLang() {
 }
 let LANG = detectLang();
 
-// t liefert den Text zum Schlüssel in der aktiven Sprache.
+// t returns the text for key in the active language.
 function t(key, vars) {
   const entry = STRINGS[key];
   let s = entry ? entry[LANGS.indexOf(LANG)] ?? entry[0] : key;
@@ -372,11 +369,10 @@ function t(key, vars) {
   return s;
 }
 
-// locale liefert das Gebietsschema für Zahlen und Datumsangaben.
+// locale returns the locale for number and date formatting.
 function locale() { return LANG === 'de' ? 'de-DE' : 'en-GB'; }
 
-// applyI18n setzt die statischen Texte: data-i18n (Text), data-i18n-placeholder,
-// data-i18n-title und data-i18n-aria (aria-label).
+// applyI18n fills data-i18n, data-i18n-placeholder, data-i18n-title and data-i18n-aria.
 function applyI18n(root = document) {
   root.querySelectorAll('[data-i18n]').forEach(el => { el.textContent = t(el.dataset.i18n); });
   root.querySelectorAll('[data-i18n-placeholder]').forEach(el => { el.placeholder = t(el.dataset.i18nPlaceholder); });
@@ -391,8 +387,7 @@ function applyI18n(root = document) {
   });
 }
 
-// setLang wechselt die Sprache, speichert sie und meldet den Wechsel per
-// Ereignis "langchange", damit die Seiten ihre dynamischen Inhalte neu aufbauen.
+// setLang switches and saves the language; "langchange" lets pages rebuild dynamic content.
 function setLang(lang) {
   if (!LANGS.includes(lang)) return;
   const changed = lang !== LANG;

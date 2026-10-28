@@ -30,8 +30,7 @@ func scanTrace(row rowScanner) (*model.Trace, error) {
 	return &t, nil
 }
 
-// queryTraces lädt Traces samt Hops. Die Hops werden in einer zweiten Abfrage
-// geladen, nachdem die erste vollständig gelesen ist (nur eine DB-Verbindung).
+// queryTraces loads traces with hops; hops follow in a second query once the first is drained (single DB connection).
 func (s *Store) queryTraces(ctx context.Context, query string, args ...any) ([]model.Trace, error) {
 	rows, err := s.db.QueryContext(noCancel(ctx), query, args...)
 	if err != nil {
@@ -89,27 +88,27 @@ func (s *Store) queryTrace(ctx context.Context, query string, args ...any) (*mod
 	return &traces[0], nil
 }
 
-// TraceByID lädt einen Trace samt Hops.
+// TraceByID loads a trace with its hops.
 func (s *Store) TraceByID(ctx context.Context, id int64) (*model.Trace, error) {
 	return s.queryTrace(ctx, `SELECT `+traceColumns+` FROM traces WHERE id = ?`, id)
 }
 
-// TraceByTestID lädt den jüngsten Trace eines Tests.
+// TraceByTestID loads a test's newest trace.
 func (s *Store) TraceByTestID(ctx context.Context, testID int64) (*model.Trace, error) {
 	return s.queryTrace(ctx, `SELECT `+traceColumns+` FROM traces WHERE test_id = ? ORDER BY created_at DESC, id DESC LIMIT 1`, testID)
 }
 
-// ListTraces liefert die neuesten Traces.
+// ListTraces returns the newest traces.
 func (s *Store) ListTraces(ctx context.Context, limit int) ([]model.Trace, error) {
 	return s.queryTraces(ctx, `SELECT `+traceColumns+` FROM traces ORDER BY created_at DESC, id DESC LIMIT ?`, limit)
 }
 
-// TracesByTest liefert alle Traces eines Tests, neueste zuerst.
+// TracesByTest returns all traces of a test, newest first.
 func (s *Store) TracesByTest(ctx context.Context, testID int64) ([]model.Trace, error) {
 	return s.queryTraces(ctx, `SELECT `+traceColumns+` FROM traces WHERE test_id = ? ORDER BY created_at DESC, id DESC`, testID)
 }
 
-// CreateTrace speichert einen Trace samt Hops in einer Transaktion und setzt die IDs.
+// CreateTrace stores a trace with its hops in one transaction and sets the IDs.
 func (s *Store) CreateTrace(ctx context.Context, t *model.Trace) error {
 	t.CreatedAt = db.Now()
 	t.TotalHops = len(t.Hops)
@@ -158,12 +157,12 @@ func nullIfEmpty(s string) *string {
 	return &s
 }
 
-// DeleteTrace löscht einen Trace; die Hops folgen per ON DELETE CASCADE.
+// DeleteTrace deletes a trace; its hops cascade.
 func (s *Store) DeleteTrace(ctx context.Context, id int64) error {
 	return affectedOne(s.db.ExecContext(noCancel(ctx), `DELETE FROM traces WHERE id = ?`, id))
 }
 
-// DeleteTracesByTest löscht alle Traces eines Tests.
+// DeleteTracesByTest deletes all traces of a test.
 func (s *Store) DeleteTracesByTest(ctx context.Context, testID int64) error {
 	return affectedOne(s.db.ExecContext(noCancel(ctx), `DELETE FROM traces WHERE test_id = ?`, testID))
 }

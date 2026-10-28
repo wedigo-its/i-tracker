@@ -9,14 +9,8 @@ import (
 	"strings"
 )
 
-// Until 2026.10.28 i-Tracker stored the last error of a test or trace as
-// German text. legacyMessages maps those texts to today's catalog keys, so
-// old rows are shown in the viewer's language too. The German patterns are
-// stored data, not texts of this version: the guard test allows this file.
-//
-// In a pattern, %s is an argument shown as it is (a host, a duration, a
-// program name), %v an embedded message that is recognized in turn. The
-// first matching pattern wins.
+// legacyMessages maps German errors stored before 2026.10.28 to catalog keys; they are data
+// (allowed by the guard test). %s is a raw argument, %v a nested message; first match wins.
 var legacyMessages = []struct{ de, key string }{
 	// Tests
 	{"Abgebrochen: Dienst wurde neu gestartet", "err.test.aborted_restart"},

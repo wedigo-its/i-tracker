@@ -15,18 +15,18 @@ func TestServerCRUD(t *testing.T) {
 
 	expectStatus(t, srv, "GET", "/api/servers", "", "", http.StatusUnauthorized)
 
-	// Anlegen mit Minimaldaten: Vorgabewerte aus DefaultServerSettings.
+	// Minimal create: defaults from DefaultServerSettings.
 	var a model.Server
 	if code := call(t, srv, "POST", "/api/servers", tok, `{"name":"A","host":"a.example.org","id":999}`, &a); code != http.StatusCreated {
-		t.Fatalf("Anlegen: Status %d", code)
+		t.Fatalf("create: status %d", code)
 	}
 	want := model.DefaultServerSettings()
 	want.Name, want.Host = "A", "a.example.org"
 	if a.ServerSettings != want {
-		t.Errorf("Vorgabewerte:\n got %+v\nwant %+v", a.ServerSettings, want)
+		t.Errorf("defaults:\n got %+v\nwant %+v", a.ServerSettings, want)
 	}
 	if a.ID == 999 || a.CreatedAt.IsZero() || !a.CreatedAt.Equal(a.UpdatedAt) {
-		t.Errorf("ID/Zeitstempel unerwartet: %+v", a)
+		t.Errorf("unexpected ID/timestamps: %+v", a)
 	}
 
 	expectStatus(t, srv, "POST", "/api/servers", tok, `{"name":"A","host":"x"}`, http.StatusBadRequest)
@@ -36,42 +36,42 @@ func TestServerCRUD(t *testing.T) {
 
 	var b model.Server
 	if code := call(t, srv, "POST", "/api/servers", tok, `{"name":"B","host":"b.example.org","enabled":false,"description":"Test"}`, &b); code != http.StatusCreated {
-		t.Fatalf("Anlegen B: Status %d", code)
+		t.Fatalf("create B: status %d", code)
 	}
 
-	// Liste: neueste zuerst, Filter enabled.
+	// List: newest first, enabled filter.
 	var list []model.Server
 	if call(t, srv, "GET", "/api/servers", tok, "", &list); len(list) != 2 || list[0].Name != "B" {
-		t.Errorf("Liste: %+v", list)
+		t.Errorf("list: %+v", list)
 	}
 	if call(t, srv, "GET", "/api/servers?enabled=true", tok, "", &list); len(list) != 1 || list[0].Name != "A" {
-		t.Errorf("Filter enabled=true: %+v", list)
+		t.Errorf("filter enabled=true: %+v", list)
 	}
 	if call(t, srv, "GET", "/api/servers?limit=1&skip=1", tok, "", &list); len(list) != 1 || list[0].Name != "A" {
-		t.Errorf("Paging: %+v", list)
+		t.Errorf("paging: %+v", list)
 	}
 	expectStatus(t, srv, "GET", "/api/servers?limit=0", tok, "", http.StatusUnprocessableEntity)
 	expectStatus(t, srv, "GET", "/api/servers?enabled=vielleicht", tok, "", http.StatusUnprocessableEntity)
 
-	// Partielles Update: nur übergebene Felder ändern sich.
+	// Partial update: only given fields change.
 	time.Sleep(2 * time.Millisecond)
 	var upd model.Server
 	if code := call(t, srv, "PUT", "/api/servers/"+itoa(b.ID), tok, `{"port":5202,"description":null,"created_at":"2000-01-01T00:00:00Z"}`, &upd); code != http.StatusOK {
-		t.Fatalf("Update: Status %d", code)
+		t.Fatalf("update: status %d", code)
 	}
 	if upd.Port != 5202 || upd.Description != nil || upd.Name != "B" || upd.Enabled ||
 		!upd.CreatedAt.Equal(b.CreatedAt) || !upd.UpdatedAt.After(b.UpdatedAt) {
-		t.Errorf("Update: %+v", upd)
+		t.Errorf("update: %+v", upd)
 	}
 	var got model.Server
 	if call(t, srv, "GET", "/api/servers/"+itoa(b.ID), tok, "", &got); got != upd {
-		t.Errorf("gespeichert != Antwort:\n got %+v\nwant %+v", got, upd)
+		t.Errorf("stored != response:\n got %+v\nwant %+v", got, upd)
 	}
 	expectStatus(t, srv, "PUT", "/api/servers/"+itoa(b.ID), tok, `{"name":"A"}`, http.StatusBadRequest)
 	expectStatus(t, srv, "PUT", "/api/servers/"+itoa(b.ID), tok, `{"default_duration":301}`, http.StatusUnprocessableEntity)
 	expectStatus(t, srv, "PUT", "/api/servers/999", tok, `{}`, http.StatusNotFound)
 
-	// Löschen.
+	// Delete.
 	expectStatus(t, srv, "DELETE", "/api/servers/"+itoa(b.ID), tok, "", http.StatusNoContent)
 	expectStatus(t, srv, "DELETE", "/api/servers/"+itoa(b.ID), tok, "", http.StatusNotFound)
 	expectStatus(t, srv, "GET", "/api/servers/"+itoa(b.ID), tok, "", http.StatusNotFound)
@@ -83,11 +83,11 @@ func itoa(id int64) string { return strconv.FormatInt(id, 10) }
 func TestRejectsInvalidUTF8(t *testing.T) {
 	srv := newTestServer(t)
 	tok := login(t, srv, "admin", "admin123")
-	// "Ö" in Latin-1 (0xD6) statt UTF-8, wie es manche Konsolen senden.
+	// U+00D6 as Latin-1 (0xD6) instead of UTF-8, as some consoles send it.
 	expectStatus(t, srv, "POST", "/api/servers", tok, "{\"name\":\"A\",\"host\":\"a\",\"description\":\"\xd6ffentlich\"}", http.StatusUnprocessableEntity)
 	var sv model.Server
 	if code := call(t, srv, "POST", "/api/servers", tok, `{"name":"A","host":"a","description":"Öffentlich"}`, &sv); code != http.StatusCreated ||
 		sv.Description == nil || *sv.Description != "Öffentlich" {
-		t.Fatalf("UTF-8-Umlaut: %d, %+v", code, sv.Description)
+		t.Fatalf("UTF-8 umlaut: %d, %+v", code, sv.Description)
 	}
 }

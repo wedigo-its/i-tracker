@@ -1,8 +1,6 @@
 'use strict';
-// Setzt data-theme vor dem ersten Zeichnen (synchron im <head> geladen, da die
-// CSP keine Inline-Skripte erlaubt). Gespeicherte Wahl in localStorage
-// "wedigo-theme", sonst immer Hell (nicht die Systemeinstellung).
-// Der frühere Schlüssel "iperf-theme" wird einmalig nach "wedigo-theme" übernommen.
+// Sets data-theme before first paint; a sync <head> file because the CSP forbids inline scripts.
+// Default is light (not the OS setting); legacy key "iperf-theme" is migrated once.
 (function () {
   var KEY = 'wedigo-theme';
   var saved = null;
@@ -18,7 +16,7 @@
   root.setAttribute('data-theme', saved === 'dark' ? 'dark' : 'light');
   window.wedigoTheme = {
     key: KEY,
-    // saved meldet, ob der Benutzer selbst ein Theme gewählt hat.
+    // saved reports whether the user picked a theme explicitly.
     saved: function () { try { return localStorage.getItem(KEY); } catch (e) { return null; } },
   };
 })();

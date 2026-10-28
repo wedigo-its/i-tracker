@@ -8,8 +8,7 @@ import (
 	"i-tracker/internal/model"
 )
 
-// DeleteTests löscht Tests, optional nur vor before und/oder eines Servers;
-// ohne Einschränkung alle. Zugehörige Traces folgen per ON DELETE CASCADE.
+// DeleteTests deletes tests, optionally only before a time and/or of one server; traces cascade.
 func (s *Store) DeleteTests(ctx context.Context, before *time.Time, serverID *int64) (int64, error) {
 	query := `DELETE FROM tests WHERE 1 = 1`
 	args := []any{}
@@ -28,8 +27,7 @@ func (s *Store) DeleteTests(ctx context.Context, before *time.Time, serverID *in
 	return res.RowsAffected()
 }
 
-// DeleteTraces löscht Traces, optional nur vor before; ohne Einschränkung
-// alle. Liefert die Anzahl gelöschter Traces und Hops.
+// DeleteTraces deletes traces, optionally only before a time, and returns the trace and hop counts.
 func (s *Store) DeleteTraces(ctx context.Context, before *time.Time) (traces, hops int64, err error) {
 	where, args := "", []any{}
 	if before != nil {
@@ -55,7 +53,7 @@ func (s *Store) DeleteTraces(ctx context.Context, before *time.Time) (traces, ho
 	return traces, hops, tx.Commit()
 }
 
-// DatabaseStats liefert die Anzahl der Datensätze und die Zeitspanne der Tests.
+// DatabaseStats returns row counts and the time span of the tests.
 func (s *Store) DatabaseStats(ctx context.Context) (*model.DatabaseStats, error) {
 	var st model.DatabaseStats
 	err := s.db.QueryRowContext(noCancel(ctx), `

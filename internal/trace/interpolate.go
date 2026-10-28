@@ -7,18 +7,17 @@ import (
 )
 
 const (
-	// sameSubnetRange ist der Suchradius (in Hops) für einen Spender im selben /24-Netz.
+	// sameSubnetRange is the search radius (hops) for a donor in the same /24.
 	sameSubnetRange = 5
-	// jitterDegrees verschiebt interpolierte Punkte zufällig (ca. ±5 km), damit
-	// sie auf der Karte nicht exakt auf dem Spender liegen.
+	// jitterDegrees randomly offsets interpolated points (about ±5 km) so they
+	// do not sit exactly on the donor on the map.
 	jitterDegrees = 0.05
 )
 
-// Interpolate ergänzt Koordinaten für beantwortete Hops, die die GeoIP-
-// Datenbank nicht kennt. Bevorzugt wird ein Hop im selben /24-Netz innerhalb
-// von ±5 Hops, sonst der nächstgelegene Hop mit Koordinaten (jeweils erst
-// rückwärts, dann vorwärts). Übernommene Daten werden mit GeoIPInterpolated
-// markiert, die Stadt mit vorangestelltem "? " (no city when the donor has none).
+// Interpolate fills coordinates for answered hops unknown to GeoIP: from a hop
+// in the same /24 within ±5 hops, else the nearest located hop (backward
+// first). Copied data is flagged GeoIPInterpolated and the city prefixed "? "
+// (no city when the donor has none).
 func Interpolate(hops []model.TraceHop, rnd *rand.Rand) {
 	for i := range hops {
 		h := &hops[i]

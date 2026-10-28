@@ -13,8 +13,7 @@ import (
 	"i-tracker/internal/trace"
 )
 
-// Eine "Minute" dauert im Test 40 ms. iperf3 und traceroute fehlen bewusst:
-// Tests und Traces schlagen sofort fehl, werden aber gespeichert.
+// A test "minute" is 40 ms; iperf3 and traceroute are missing on purpose, so runs fail fast but are stored.
 const testMinute = 40 * time.Millisecond
 
 type env struct {
@@ -30,7 +29,7 @@ func newEnv(t *testing.T) *env {
 	}
 	t.Cleanup(func() {
 		if err := conn.Close(); err != nil {
-			t.Errorf("DB schließen: %v", err)
+			t.Errorf("close DB: %v", err)
 		}
 	})
 	st := store.New(conn)
@@ -82,33 +81,33 @@ func TestSchedulerRunsDueServers(t *testing.T) {
 		t.Fatal(err)
 	}
 	if !e.sched.Running() {
-		t.Fatal("Scheduler läuft nicht")
+		t.Fatal("scheduler not running")
 	}
-	// Der erste Lauf erfolgt erst nach einem Intervall.
+	// The first run comes only after one interval.
 	if n := len(e.tests(t, plain)); n != 0 {
-		t.Errorf("sofortiger Lauf nach Start: %d Tests", n)
+		t.Errorf("immediate run after start: %d tests", n)
 	}
 
 	time.Sleep(6 * testMinute)
 	if n := len(e.tests(t, plain)); n < 2 {
-		t.Errorf("plain: %d Tests nach 6 Intervallen", n)
+		t.Errorf("plain: %d tests after 6 intervals", n)
 	}
 	if n := len(e.tests(t, off)) + len(e.tests(t, disabled)); n != 0 {
-		t.Errorf("nicht eingeplante Server liefen: %d Tests", n)
+		t.Errorf("unscheduled servers ran: %d tests", n)
 	}
 
-	// Geplante Tests nutzen die Vorgaben des Servers, inkl. UDP-Bandbreite.
+	// Scheduled tests use the server defaults, including UDP bandwidth.
 	ut := e.tests(t, udp)
 	if len(ut) == 0 {
-		t.Fatal("udp: keine Tests")
+		t.Fatal("udp: no tests")
 	}
 	got := ut[len(ut)-1]
 	if got.Protocol != model.ProtocolUDP || got.Duration != 7 || got.ParallelStreams != 3 ||
 		got.UDPBandwidthMbps == nil || *got.UDPBandwidthMbps != 250 {
-		t.Errorf("Testparameter: %+v", got)
+		t.Errorf("test parameters: %+v", got)
 	}
 
-	// Auto-Trace: Nach dem Test wird ein Trace mit Test-Verknüpfung gespeichert.
+	// Auto-trace: a trace linked to the test is stored afterwards.
 	deadline := time.Now().Add(2 * time.Second)
 	for {
 		traces, err := e.store.TracesByTest(context.Background(), got.ID)
@@ -119,7 +118,7 @@ func TestSchedulerRunsDueServers(t *testing.T) {
 			break
 		}
 		if time.Now().After(deadline) {
-			t.Fatalf("kein Auto-Trace für Test %d", got.ID)
+			t.Fatalf("no auto-trace for test %d", got.ID)
 		}
 		time.Sleep(10 * time.Millisecond)
 	}
@@ -132,31 +131,31 @@ func TestSchedulerUpdateAndRemove(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Zeitplan abschalten: keine weiteren Tests.
+	// Schedule off: no more tests.
 	sv.ScheduleEnabled = false
 	if e.sched.Update(sv) {
-		t.Error("Update meldet Einplanung trotz abgeschaltetem Zeitplan")
+		t.Error("Update reports scheduled although schedule is off")
 	}
 	time.Sleep(4 * testMinute)
 	if n := len(e.tests(t, sv)); n != 0 {
-		t.Errorf("nach Abschalten: %d Tests", n)
+		t.Errorf("after switching off: %d tests", n)
 	}
 
-	// Wieder einschalten, dann entfernen.
+	// Switch on again, then remove.
 	sv.ScheduleEnabled = true
 	if !e.sched.Update(sv) {
-		t.Fatal("Update plant nicht ein")
+		t.Fatal("Update does not schedule")
 	}
 	time.Sleep(4 * testMinute)
 	e.sched.Remove(sv.ID)
-	time.Sleep(testMinute) // ein evtl. gerade laufender Durchlauf endet
+	time.Sleep(testMinute) // let a pass in progress finish
 	n := len(e.tests(t, sv))
 	if n == 0 {
-		t.Fatal("nach Einschalten keine Tests")
+		t.Fatal("no tests after switching on")
 	}
 	time.Sleep(4 * testMinute)
 	if m := len(e.tests(t, sv)); m != n {
-		t.Errorf("nach Remove weitere Tests: %d → %d", n, m)
+		t.Errorf("more tests after Remove: %d -> %d", n, m)
 	}
 }
 
@@ -166,13 +165,13 @@ func TestSchedulerKeepsUnchangedInterval(t *testing.T) {
 	if err := e.sched.Start(context.Background()); err != nil {
 		t.Fatal(err)
 	}
-	// Wiederholtes Speichern ohne Intervalländerung setzt den Countdown nicht zurück.
+	// Saving again with the same interval must not reset the countdown.
 	for i := 0; i < 5; i++ {
 		time.Sleep(testMinute)
 		e.sched.Update(sv)
 	}
 	if n := len(e.tests(t, sv)); n == 0 {
-		t.Error("Countdown wurde durch Update zurückgesetzt")
+		t.Error("Update reset the countdown")
 	}
 }
 
@@ -180,7 +179,7 @@ func TestSchedulerNotStarted(t *testing.T) {
 	e := newEnv(t)
 	sv := e.server(t, "a", nil)
 	if e.sched.Update(sv) || e.sched.Running() {
-		t.Error("ungestarteter Scheduler darf nichts einplanen")
+		t.Error("scheduler not started must not schedule")
 	}
 	e.sched.Remove(sv.ID)
 	e.sched.Stop()

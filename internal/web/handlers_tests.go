@@ -50,9 +50,7 @@ func (s *Server) handleListTests(w http.ResponseWriter, r *http.Request, _ *mode
 	writeJSON(w, r, http.StatusOK, tests)
 }
 
-// handleGetTest liefert einen Test mit Server-Profil und Rohausgabe. Gäste
-// (u == nil) erhalten die Rohausgabe nicht: iperf3 schreibt dort auch
-// Systemangaben und Adressen des Messrechners hinein.
+// handleGetTest hides the raw output from guests (u == nil): it holds host system details and addresses.
 func (s *Server) handleGetTest(w http.ResponseWriter, r *http.Request, u *model.User) {
 	id, ok := pathID(w, r, "test_id")
 	if !ok {
@@ -75,14 +73,13 @@ func (s *Server) handleGetTest(w http.ResponseWriter, r *http.Request, u *model.
 }
 
 func (s *Server) handleRunTest(w http.ResponseWriter, r *http.Request, _ *model.User) {
-	// Vorgabewerte für nicht angegebene Felder.
 	req := struct {
 		ServerID        int64           `json:"server_id"`
 		Protocol        model.Protocol  `json:"protocol"`
 		Direction       model.Direction `json:"direction"`
 		Duration        int             `json:"duration"`
 		ParallelStreams int             `json:"parallel_streams"`
-		// Optional; ohne Angabe gilt bei UDP die Vorgabe des Servers.
+		// Optional; UDP falls back to the server default.
 		UDPBandwidthMbps *float64 `json:"udp_bandwidth_mbps"`
 	}{Protocol: model.ProtocolTCP, Direction: model.DirectionDownload, Duration: 10, ParallelStreams: 1}
 	if !decodeJSON(w, r, &req) {
@@ -157,7 +154,7 @@ func (s *Server) handleDeleteTest(w http.ResponseWriter, r *http.Request, _ *mod
 	w.WriteHeader(http.StatusNoContent)
 }
 
-// handleLatestTest liefert den jüngsten erfolgreichen Test eines Servers oder null.
+// handleLatestTest returns a server's latest completed test or null.
 func (s *Server) handleLatestTest(w http.ResponseWriter, r *http.Request, _ *model.User) {
 	id, ok := pathID(w, r, "server_id")
 	if !ok {
@@ -176,9 +173,8 @@ func (s *Server) handleLatestTest(w http.ResponseWriter, r *http.Request, _ *mod
 	writeJSON(w, r, http.StatusOK, t)
 }
 
-// handleTestLive liefert den Live-Status für die Fortschrittsanzeige. Solange
-// der Runner einen Live-Eintrag hält (bis 10 s nach Testende), gilt der Test
-// als laufend – die Oberfläche zeigt so noch die Endwerte an.
+// handleTestLive reports a test as running while the runner holds a live entry
+// (until 10 s after the end), so the UI still shows the final values.
 func (s *Server) handleTestLive(w http.ResponseWriter, r *http.Request, _ *model.User) {
 	id, ok := pathID(w, r, "test_id")
 	if !ok {

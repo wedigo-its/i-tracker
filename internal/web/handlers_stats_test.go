@@ -17,7 +17,7 @@ func TestStatsRoutes(t *testing.T) {
 	}
 	for _, k := range []string{"total_servers", "active_servers", "total_tests", "tests_today", "avg_download_mbps", "avg_upload_mbps", "last_test_at"} {
 		if _, ok := dash[k]; !ok {
-			t.Errorf("dashboard ohne Feld %s", k)
+			t.Errorf("dashboard missing field %s", k)
 		}
 	}
 
@@ -45,7 +45,7 @@ func TestStatusRoute(t *testing.T) {
 	if code := call(t, srv, "GET", "/api/status", tok, "", &st); code != http.StatusOK || st.Iperf3.Path == "" {
 		t.Fatalf("status: %d, %+v", code, st)
 	}
-	// Der Test-Runner hat keine iperf3-Binary.
+	// The test runner has no iperf3 binary.
 	if st.Iperf3.Available || st.SchedulerRunning {
 		t.Errorf("status: %+v", st)
 	}

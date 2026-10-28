@@ -11,7 +11,7 @@ import (
 	"i-tracker/internal/model"
 )
 
-// testColumns enthält alle Spalten außer raw_output, das nur die Detailansicht braucht.
+// testColumns omits raw_output; only the detail view needs it.
 const testColumns = `id, server_id, protocol, direction, duration, parallel_streams, udp_bandwidth_mbps, status,
 	started_at, completed_at,
 	download_bandwidth_mbps, download_bytes, download_jitter_ms, download_packet_loss_percent,
@@ -54,7 +54,7 @@ func (s *Store) queryTests(ctx context.Context, query string, args ...any) ([]mo
 	return tests, rows.Err()
 }
 
-// TestFilter schränkt ListTests ein; nil-Felder filtern nicht.
+// TestFilter narrows ListTests; nil fields do not filter.
 type TestFilter struct {
 	ServerID *int64
 	Status   *model.TestStatus
@@ -63,7 +63,7 @@ type TestFilter struct {
 	Limit    int
 }
 
-// ListTests liefert Tests, neueste zuerst.
+// ListTests returns tests, newest first.
 func (s *Store) ListTests(ctx context.Context, f TestFilter) ([]model.Test, error) {
 	query := `SELECT ` + testColumns + ` FROM tests WHERE 1 = 1`
 	args := []any{}
@@ -88,12 +88,12 @@ func (s *Store) ListTests(ctx context.Context, f TestFilter) ([]model.Test, erro
 	return s.queryTests(ctx, query, args...)
 }
 
-// TestByID lädt einen Test (ohne Rohausgabe).
+// TestByID loads a test without raw output.
 func (s *Store) TestByID(ctx context.Context, id int64) (*model.Test, error) {
 	return scanTest(s.db.QueryRowContext(noCancel(ctx), `SELECT `+testColumns+` FROM tests WHERE id = ?`, id))
 }
 
-// TestDetailByID lädt einen Test inklusive Server-Profil und Rohausgabe.
+// TestDetailByID loads a test with its server profile and raw output.
 func (s *Store) TestDetailByID(ctx context.Context, id int64) (*model.TestDetail, error) {
 	var raw *string
 	t, err := scanTest(s.db.QueryRowContext(noCancel(ctx), `SELECT `+testColumns+`, raw_output FROM tests WHERE id = ?`, id), &raw)
@@ -107,14 +107,14 @@ func (s *Store) TestDetailByID(ctx context.Context, id int64) (*model.TestDetail
 	return &model.TestDetail{Test: *t, Server: *sv, RawOutput: raw}, nil
 }
 
-// LatestCompletedTest liefert den jüngsten erfolgreichen Test eines Servers.
+// LatestCompletedTest returns a server's newest completed test.
 func (s *Store) LatestCompletedTest(ctx context.Context, serverID int64) (*model.Test, error) {
 	return scanTest(s.db.QueryRowContext(noCancel(ctx),
 		`SELECT `+testColumns+` FROM tests WHERE server_id = ? AND status = ?
 		 ORDER BY created_at DESC, id DESC LIMIT 1`, serverID, model.StatusCompleted))
 }
 
-// CreateTest speichert t als wartenden Test und setzt ID und CreatedAt.
+// CreateTest stores t as pending and sets ID and CreatedAt.
 func (s *Store) CreateTest(ctx context.Context, t *model.Test) error {
 	t.Status = model.StatusPending
 	t.CreatedAt = db.Now()
@@ -129,18 +129,15 @@ func (s *Store) CreateTest(ctx context.Context, t *model.Test) error {
 	return err
 }
 
-// StartTest markiert einen Test als laufend.
+// StartTest marks a test as running.
 func (s *Store) StartTest(ctx context.Context, id int64, startedAt time.Time) error {
 	return affectedOne(s.db.ExecContext(noCancel(ctx),
 		`UPDATE tests SET status = ?, started_at = ? WHERE id = ?`,
 		model.StatusRunning, db.FormatTime(startedAt), id))
 }
 
-// failureColumns returns the stored form of a failure: the English text for
-// error_message and the language-neutral message for error_text. Both are
-// NULL without a failure; error_text is NULL too for text without a catalog
-// key (another program's output), as in traces (CreateTrace) and in rows
-// of versions before the column existed.
+// failureColumns returns error_message (English text) and error_text (catalog message JSON);
+// both NULL without failure, error_text also NULL for foreign text, as in CreateTrace.
 func failureColumns(failure error) (msg, text *string) {
 	if failure == nil {
 		return nil, nil
@@ -149,8 +146,7 @@ func failureColumns(failure error) (msg, text *string) {
 	return &m, nullIfEmpty(i18n.MsgOf(failure).Encode())
 }
 
-// FinishTest stores the final status, the results, the reason of a failure
-// (nil = none) and the raw output.
+// FinishTest stores final status, results, failure (nil = none) and raw output.
 func (s *Store) FinishTest(ctx context.Context, id int64, status model.TestStatus, completedAt time.Time,
 	r model.TestResult, failure error, rawOutput *string) error {
 	errMsg, errText := failureColumns(failure)
@@ -166,9 +162,7 @@ func (s *Store) FinishTest(ctx context.Context, id int64, status model.TestStatu
 		r.Retransmits, r.CPUPercent, errMsg, errText, rawOutput, id))
 }
 
-// FailUnfinishedTests marks every pending or running test as failed with
-// reason. Called on start: such tests are left over from a run that was
-// interrupted.
+// FailUnfinishedTests fails all pending/running tests with reason; called on start for leftovers of an interrupted run.
 func (s *Store) FailUnfinishedTests(ctx context.Context, reason error) (int64, error) {
 	errMsg, errText := failureColumns(reason)
 	res, err := s.db.ExecContext(noCancel(ctx),
@@ -180,7 +174,7 @@ func (s *Store) FailUnfinishedTests(ctx context.Context, reason error) (int64, e
 	return res.RowsAffected()
 }
 
-// DeleteTest löscht einen Test; zugehörige Traces folgen per ON DELETE CASCADE.
+// DeleteTest deletes a test; its traces cascade.
 func (s *Store) DeleteTest(ctx context.Context, id int64) error {
 	return affectedOne(s.db.ExecContext(noCancel(ctx), `DELETE FROM tests WHERE id = ?`, id))
 }

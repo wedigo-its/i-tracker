@@ -10,11 +10,10 @@ import (
 	"i-tracker/internal/model"
 )
 
-// liveTestsInterval ist der Abstand, in dem der Server den Live-Status prüft;
-// gesendet wird nur bei Änderungen.
+// liveTestsInterval is the live status poll interval; events go out only on change.
 const liveTestsInterval = 500 * time.Millisecond
 
-// liveTest ist ein Eintrag im Live-Strom (Felder wie GET /api/tests/{id}/live).
+// liveTest is a live stream entry (fields as in GET /api/tests/{id}/live).
 type liveTest struct {
 	TestID              int64            `json:"test_id"`
 	ServerID            int64            `json:"server_id"`
@@ -28,11 +27,8 @@ type liveTest struct {
 	CurrentUploadMbps   float64          `json:"current_upload_mbps"`
 }
 
-// handleLiveTestsStream sendet per Server-Sent Events den Live-Status aller
-// wartenden, laufenden und gerade beendeten Tests:
-// {"type":"live","tests":[…]} – sofort beim Verbinden und danach bei jeder
-// Änderung. Ein beendeter Test bleibt noch 10 s mit seinen Endwerten in der
-// Liste und fällt dann heraus. Ersetzt das Abfragen von /api/tests/{id}/live.
+// handleLiveTestsStream sends {"type":"live","tests":[…]} via SSE on connect and
+// on every change; finished tests stay listed for 10 s with their final values.
 func (s *Server) handleLiveTestsStream(w http.ResponseWriter, r *http.Request, _ *model.User) {
 	stream := newSSEStream(w)
 	ctx := r.Context()
@@ -65,7 +61,7 @@ func (s *Server) handleLiveTestsStream(w http.ResponseWriter, r *http.Request, _
 	}
 }
 
-// liveTests baut die Liste für den Live-Strom; names puffert Servernamen.
+// liveTests builds the live stream list; names caches server names.
 func (s *Server) liveTests(ctx context.Context, names map[int64]string) []liveTest {
 	all := s.runner.LiveAll()
 	out := make([]liveTest, 0, len(all))

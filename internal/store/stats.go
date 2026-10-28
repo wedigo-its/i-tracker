@@ -10,8 +10,7 @@ import (
 	"i-tracker/internal/model"
 )
 
-// DashboardStats liefert die Kennzahlen der Übersicht. todayStart ist der
-// Beginn des aktuellen Tages; Tests ab diesem Zeitpunkt zählen als „heute“.
+// DashboardStats returns the overview figures; tests from todayStart on count as "today".
 func (s *Store) DashboardStats(ctx context.Context, todayStart time.Time) (*model.DashboardStats, error) {
 	var st model.DashboardStats
 	err := s.db.QueryRowContext(noCancel(ctx), `
@@ -32,8 +31,7 @@ func (s *Store) DashboardStats(ctx context.Context, todayStart time.Time) (*mode
 	return &st, nil
 }
 
-// serverStatsQuery aggregiert alle Kennzahlen je Server in einer Abfrage.
-// Jitter und Paketverlust werden über beide Richtungen gemittelt.
+// serverStatsQuery aggregates per-server figures in one query; jitter and loss average both directions.
 const serverStatsQuery = `
 	WITH ok AS (
 		SELECT server_id, download_bandwidth_mbps, upload_bandwidth_mbps,
@@ -63,7 +61,7 @@ const serverStatsQuery = `
 	LEFT JOIN tests t ON t.server_id = s.id
 	LEFT JOIN agg ON agg.server_id = s.id`
 
-// ServerStats liefert die Kennzahlen aller Server, sortiert nach ID.
+// ServerStats returns the figures of all servers, ordered by ID.
 func (s *Store) ServerStats(ctx context.Context) ([]model.ServerStats, error) {
 	rows, err := s.db.QueryContext(noCancel(ctx), serverStatsQuery+` GROUP BY s.id ORDER BY s.id`)
 	if err != nil {
@@ -82,7 +80,7 @@ func (s *Store) ServerStats(ctx context.Context) ([]model.ServerStats, error) {
 	return list, rows.Err()
 }
 
-// ServerStatsByID liefert die Kennzahlen eines Servers.
+// ServerStatsByID returns the figures of one server.
 func (s *Store) ServerStatsByID(ctx context.Context, id int64) (*model.ServerStats, error) {
 	return scanServerStats(s.db.QueryRowContext(noCancel(ctx), serverStatsQuery+` WHERE s.id = ? GROUP BY s.id`, id))
 }

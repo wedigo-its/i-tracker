@@ -13,7 +13,7 @@ import (
 	"i-tracker/internal/i18n"
 )
 
-// installTimeout begrenzt eine Installation.
+// installTimeout caps an installation.
 const installTimeout = 10 * time.Minute
 
 var (
@@ -24,14 +24,14 @@ var (
 	ErrNotInstallable = i18n.E("err.install.not_installable")
 )
 
-// Status beschreibt die iperf3-Installation, die der Runner verwendet.
+// Status describes the iperf3 installation the Runner uses.
 type Status struct {
 	Path       string `json:"path"`
 	Version    string `json:"version,omitempty"`
-	Available  bool   `json:"available"`  // vorhanden und neu genug
-	Installing bool   `json:"installing"` // Installation läuft
-	// Installable ist true, wenn iperf3 fehlt und über den Paketmanager
-	// installiert werden kann; InstallCommand nennt die Befehle dafür.
+	Available  bool   `json:"available"` // present and new enough
+	Installing bool   `json:"installing"`
+	// Installable is true if iperf3 is missing but installable via the package
+	// manager; InstallCommand holds the commands.
 	Installable    bool   `json:"installable"`
 	InstallCommand string `json:"install_command,omitempty"`
 	// Error is Err in English; the web UI renders Err in the request language.
@@ -48,7 +48,7 @@ func (st *Status) setErr(err error) {
 	}
 }
 
-// Austauschbar für Tests: Ermittlung der Installationsbefehle und Installation.
+// Replaceable in tests.
 var (
 	installPlan = func() ([][]string, error) {
 		return installCommands(runtime.GOOS, exec.LookPath, os.Geteuid() == 0)
@@ -56,7 +56,7 @@ var (
 	installFunc = Install
 )
 
-// Status liefert den aktuellen iperf3-Status.
+// Status returns the current iperf3 status.
 func (r *Runner) Status() Status {
 	r.cmdMu.RLock()
 	defer r.cmdMu.RUnlock()
@@ -69,7 +69,7 @@ func (r *Runner) commandLine() []string {
 	return r.command
 }
 
-// refresh prüft binary, übernimmt es und ermittelt, ob iperf3 installierbar ist.
+// refresh checks and adopts binary and determines whether iperf3 is installable.
 func (r *Runner) refresh(binary string) error {
 	r.cmdMu.RLock()
 	configured := r.configured
@@ -99,10 +99,10 @@ func (r *Runner) refresh(binary string) error {
 	return err
 }
 
-// Prepare sucht iperf3 und prüft die Version. Fehlt iperf3, wird es nur bei
-// autoInstall sofort installiert; sonst bleibt die Installation der
-// Oberfläche überlassen (InstallAsync nach Bestätigung durch einen Admin).
-// Eine zu alte Version wird nur gemeldet, ein konfigurierter Pfad nie ersetzt.
+// Prepare finds iperf3 and checks its version. A missing iperf3 is installed
+// right away only with autoInstall; otherwise the UI installs it after admin
+// confirmation (InstallAsync). A too old version is only reported and a
+// configured path never replaced.
 func (r *Runner) Prepare(configured string, autoInstall bool) {
 	r.cmdMu.Lock()
 	r.configured = configured
@@ -123,8 +123,7 @@ func (r *Runner) Prepare(configured string, autoInstall bool) {
 		"installable", r.Status().Installable)
 }
 
-// InstallAsync installiert iperf3 im Hintergrund über den Paketmanager und
-// verwendet es anschließend ohne Neustart.
+// InstallAsync installs iperf3 in the background and uses it without restart.
 func (r *Runner) InstallAsync() error {
 	r.cmdMu.Lock()
 	switch {
@@ -147,8 +146,7 @@ func (r *Runner) InstallAsync() error {
 		defer cancel()
 		installErr := installFunc(ctx)
 
-		// Auch nach einem Fehler neu suchen: winget meldet z. B. einen Fehler,
-		// wenn das Paket bereits installiert ist.
+		// Search again even on error: winget fails e.g. if already installed.
 		binary := FindBinary("")
 		if err := r.refresh(binary); err != nil {
 			switch {

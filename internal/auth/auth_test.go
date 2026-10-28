@@ -14,21 +14,21 @@ func TestArgon2id(t *testing.T) {
 		t.Fatal(err)
 	}
 	if !strings.HasPrefix(h, "$argon2id$v=19$m=65536,t=3,p=4$") {
-		t.Fatalf("Hash-Format: %s", h)
+		t.Fatalf("hash format: %s", h)
 	}
 	if !CheckPassword(h, "geheim") || CheckPassword(h, "Geheim") || CheckPassword(h, "") {
-		t.Error("Prüfung falsch")
+		t.Error("check wrong")
 	}
 	if NeedsRehash(h) {
-		t.Error("frischer Hash soll nicht neu gehasht werden")
+		t.Error("fresh hash must not need a rehash")
 	}
 	h2, _ := HashPassword("geheim")
 	if h == h2 {
-		t.Error("Salz fehlt")
+		t.Error("salt missing")
 	}
 	for _, broken := range []string{"$argon2id$", "$argon2id$v=19$m=1,t=1,p=1$!!$!!", "$argon2id$v=18$m=65536,t=3,p=4$AAAA$AAAA"} {
 		if CheckPassword(broken, "geheim") {
-			t.Errorf("%q akzeptiert", broken)
+			t.Errorf("%q accepted", broken)
 		}
 	}
 }
@@ -39,10 +39,10 @@ func TestBcryptStillAccepted(t *testing.T) {
 		t.Fatal(err)
 	}
 	if !CheckPassword(string(b), "admin123") || CheckPassword(string(b), "falsch") {
-		t.Error("bcrypt-Prüfung falsch")
+		t.Error("bcrypt check wrong")
 	}
 	if !NeedsRehash(string(b)) {
-		t.Error("bcrypt-Hash muss umgehasht werden")
+		t.Error("bcrypt hash must need a rehash")
 	}
 }
 
@@ -51,7 +51,7 @@ func TestGeneratePassword(t *testing.T) {
 	for i := 0; i < 50; i++ {
 		p := GeneratePassword()
 		if len(p) != 18 || strings.ContainsAny(p, "0O1lI") || seen[p] {
-			t.Fatalf("Passwort %q", p)
+			t.Fatalf("password %q", p)
 		}
 		seen[p] = true
 	}
@@ -61,10 +61,10 @@ func TestCSRF(t *testing.T) {
 	tok := NewTokens("s", 0)
 	a, b := tok.CSRF("sitzung-a"), tok.CSRF("sitzung-b")
 	if a == b || !tok.CheckCSRF("sitzung-a", a) || tok.CheckCSRF("sitzung-a", b) || tok.CheckCSRF("sitzung-a", "") {
-		t.Error("CSRF-Prüfung falsch")
+		t.Error("CSRF check wrong")
 	}
 	if NewTokens("anders", 0).CheckCSRF("sitzung-a", a) {
-		t.Error("CSRF-Token unabhängig vom Schlüssel")
+		t.Error("CSRF token independent of key")
 	}
 }
 
@@ -74,7 +74,7 @@ func TestDummyHash(t *testing.T) {
 		t.Fatalf("DummyHash: %q", h)
 	}
 	if CheckPassword(h, "") || CheckPassword(h, "admin123") {
-		t.Error("DummyHash akzeptiert ein Passwort")
+		t.Error("DummyHash accepts a password")
 	}
 }
 
@@ -83,7 +83,7 @@ func TestTokensSliding(t *testing.T) {
 	tok := NewTokens("s", 2*time.Hour)
 	tok.now = func() time.Time { return now }
 	if NewTokens("s", 0).TTL() != DefaultSessionTTL {
-		t.Error("Standardlaufzeit fehlt")
+		t.Error("default TTL missing")
 	}
 
 	s, c, err := tok.Create("admin", 3)
@@ -92,40 +92,40 @@ func TestTokensSliding(t *testing.T) {
 	}
 	_, c2, _ := tok.Create("admin", 3)
 	if c2.SessionID == c.SessionID {
-		t.Error("Sitzungskennung nicht zufällig")
+		t.Error("session ID not random")
 	}
 	got, err := tok.Parse(s)
 	if err != nil || got.Username != c.Username || got.Version != c.Version || got.SessionID != c.SessionID ||
 		!got.IssuedAt.Equal(c.IssuedAt) || !got.ExpiresAt.Equal(c.ExpiresAt) {
-		t.Fatalf("Parse: %+v %v, erwartet %+v", got, err, c)
+		t.Fatalf("Parse: %+v %v, want %+v", got, err, c)
 	}
 	if tok.NeedsRenewal(got) {
-		t.Error("frisches Token soll nicht verlängert werden")
+		t.Error("fresh token must not need renewal")
 	}
 
-	// Nach mehr als der halben Laufzeit: verlängern, gleiche Sitzung.
+	// Past half the lifetime: renew, same session.
 	now = now.Add(time.Hour + time.Second)
 	if !tok.NeedsRenewal(got) {
-		t.Error("Token nach halber Laufzeit nicht zur Verlängerung vorgesehen")
+		t.Error("token past half lifetime not due for renewal")
 	}
 	s2, r, err := tok.Renew(got)
 	if err != nil || r.SessionID != c.SessionID || r.Version != 3 || !r.ExpiresAt.After(c.ExpiresAt) {
 		t.Fatalf("Renew: %+v %v", r, err)
 	}
 	if tok.CSRF(r.SessionID) != tok.CSRF(c.SessionID) {
-		t.Error("CSRF-Token ändert sich beim Verlängern")
+		t.Error("CSRF token changes on renewal")
 	}
 
-	// Ohne Verlängerung läuft das alte Token ab, das neue gilt weiter.
+	// The old token expires, the renewed one stays valid.
 	now = c.ExpiresAt.Add(time.Second)
 	if _, err := tok.Parse(s); err == nil {
-		t.Error("abgelaufenes Token akzeptiert")
+		t.Error("expired token accepted")
 	}
 	if _, err := tok.Parse(s2); err != nil {
-		t.Errorf("verlängertes Token: %v", err)
+		t.Errorf("renewed token: %v", err)
 	}
 	if _, err := NewTokens("anders", 0).Parse(s2); err == nil {
-		t.Error("fremder Schlüssel akzeptiert")
+		t.Error("foreign key accepted")
 	}
 }
 
@@ -135,18 +135,18 @@ func TestLimiter(t *testing.T) {
 	l.now = func() time.Time { return now }
 	for i := 0; i < 3; i++ {
 		if l.Blocked("a") {
-			t.Fatalf("nach %d Fehlversuchen gesperrt", i)
+			t.Fatalf("blocked after %d failures", i)
 		}
 		l.Fail("a")
 		now = now.Add(time.Minute)
 	}
 	if !l.Blocked("a") || l.Blocked("b") {
-		t.Error("Sperre je Adresse falsch")
+		t.Error("per-address block wrong")
 	}
-	// Der erste Fehlversuch verfällt nach dem Zeitfenster.
+	// The first failure expires after the window.
 	now = now.Add(2*time.Minute + time.Second)
 	if l.Blocked("a") {
-		t.Error("Sperre nach Ablauf des Zeitfensters")
+		t.Error("still blocked after the window")
 	}
 }
 
@@ -155,20 +155,20 @@ func TestRevocations(t *testing.T) {
 	r := NewRevocations()
 	r.now = func() time.Time { return now }
 	if !r.Revoke("x", now.Add(time.Hour)) || !r.Revoked("x") || r.Revoked("y") {
-		t.Fatal("Sperre falsch")
+		t.Fatal("revocation wrong")
 	}
-	// Ein früheres Ende verkürzt eine bestehende Sperre nicht.
+	// An earlier end does not shorten an existing revocation.
 	r.Revoke("x", now.Add(time.Minute))
 	now = now.Add(30 * time.Minute)
 	if !r.Revoked("x") {
-		t.Error("Sperre verkürzt")
+		t.Error("revocation shortened")
 	}
 	now = now.Add(31 * time.Minute)
 	if r.Revoked("x") {
-		t.Error("Sperre nach Ablauf noch aktiv")
+		t.Error("revocation still active after expiry")
 	}
 	r.Revoke("z", now.Add(time.Hour))
 	if _, ok := r.until["x"]; ok {
-		t.Error("abgelaufener Eintrag nicht aufgeräumt")
+		t.Error("expired entry not pruned")
 	}
 }

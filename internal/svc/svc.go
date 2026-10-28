@@ -1,9 +1,6 @@
-// Package svc verwaltet den Betriebssystemdienst (Windows-Dienst, systemd,
-// launchd) über github.com/kardianos/service – nach dem Muster des
-// Spherifyer.
-//
-// Der installierte Dienst startet die Binary mit dem Argument "service-run"
-// und dem bei der Installation festgelegten Konfigurationspfad.
+// Package svc manages the OS service (Windows service, systemd, launchd) via
+// github.com/kardianos/service, modelled on Spherifyer. The installed service
+// runs the binary with "service-run" and the config path set at install time.
 package svc
 
 import (
@@ -15,11 +12,11 @@ import (
 	"github.com/kardianos/service"
 )
 
-// Name ist der Bezeichner des Dienstes.
+// Name is the service identifier.
 const Name = "i-tracker"
 
-// config liefert die Dienstdefinition. cfgPath ist nur für die Installation
-// relevant; Start/Stopp/Status finden den Dienst über den Namen.
+// config returns the service definition; cfgPath only matters for install
+// (start/stop/status find the service by name).
 func config(cfgPath string) *service.Config {
 	wd := ""
 	if exe, err := os.Executable(); err == nil {
@@ -37,11 +34,11 @@ func config(cfgPath string) *service.Config {
 		WorkingDirectory: wd,
 		Option:           service.KeyValue{},
 	}
-	// systemd: nach dem Netzwerk starten (unter Windows wären das Dienstnamen).
+	// systemd: start after the network (on Windows these would be service names).
 	if runtime.GOOS == "linux" {
 		cfg.Dependencies = []string{"After=network-online.target", "Wants=network-online.target"}
 	}
-	// Optionales Dienstkonto aus der Umgebung (wie Spherifyer).
+	// Optional service account from the environment (as in Spherifyer).
 	if user := os.Getenv("SERVICE_ACCOUNT_USER"); user != "" {
 		cfg.UserName = user
 		if pw := os.Getenv("SERVICE_ACCOUNT_PASSWORD"); pw != "" {
@@ -51,13 +48,12 @@ func config(cfgPath string) *service.Config {
 	return cfg
 }
 
-// New baut den Dienst für prg (Aufruf mit "service-run").
+// New builds the service for prg (invoked with "service-run").
 func New(prg service.Interface, cfgPath string) (service.Service, error) {
 	return service.New(prg, config(cfgPath))
 }
 
-// Interactive meldet, ob das Programm in einer Konsole läuft (und nicht unter
-// dem Dienstmanager).
+// Interactive reports whether the program runs in a console, not under the service manager.
 func Interactive() bool { return service.Interactive() }
 
 func control(action, cfgPath string) error {
@@ -68,19 +64,19 @@ func control(action, cfgPath string) error {
 	return service.Control(s, action)
 }
 
-// Install registriert den Dienst; cfgPath wird als -config übergeben.
+// Install registers the service; cfgPath is passed as -config.
 func Install(cfgPath string) error { return control("install", cfgPath) }
 
-// Uninstall entfernt den Dienst.
+// Uninstall removes the service.
 func Uninstall() error { return control("uninstall", "") }
 
-// Start startet den installierten Dienst.
+// Start starts the installed service.
 func Start() error { return control("start", "") }
 
-// Stop stoppt den Dienst.
+// Stop stops the service.
 func Stop() error { return control("stop", "") }
 
-// Restart startet den Dienst neu.
+// Restart restarts the service.
 func Restart() error { return control("restart", "") }
 
 // Status reports "running", "stopped", "not installed" or "unknown".
@@ -106,7 +102,7 @@ func Status() (string, error) {
 	}
 }
 
-// Platform liefert das Dienstsystem, z. B. "windows-service" oder "linux-systemd".
+// Platform returns the service system, e.g. "windows-service" or "linux-systemd".
 func Platform() string { return service.Platform() }
 
 type noopProgram struct{}

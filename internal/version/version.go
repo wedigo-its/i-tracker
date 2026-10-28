@@ -1,15 +1,13 @@
-// Package version hält Versionskennung und die zur Build-Zeit injizierte
-// Build-Zeit. BuildDate wird über -ldflags
-// "-X i-tracker/internal/version.BuildDate=..." gesetzt (siehe build.cmd)
-// und erlaubt es, zweifelsfrei festzustellen, welches Binary tatsächlich läuft.
+// Package version holds the version and the build time injected via -ldflags
+// "-X i-tracker/internal/version.BuildDate=..." (see build.cmd), which shows
+// exactly which binary is running.
 package version
 
-// Name ist der Anzeigename der Anwendung.
+// Name is the application's display name.
 const Name = "i-Tracker"
 
-// Version ist die Anwendungsversion.
+// Version is the application version.
 const Version = "2.0.0-dev"
 
-// BuildDate ist der zur Build-Zeit gesetzte Zeitstempel (Format 2006-01-02 15:04).
-// "dev" bei ungestempelten Builds (z. B. direkter `go run`).
+// BuildDate is the build timestamp (2006-01-02 15:04); "dev" for unstamped builds (e.g. go run).
 var BuildDate = "dev"

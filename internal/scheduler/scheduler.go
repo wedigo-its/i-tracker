@@ -1,5 +1,4 @@
-// Package scheduler führt Tests je Server im eingestellten Intervall aus und
-// startet bei aktiviertem Auto-Trace anschließend eine Routenverfolgung.
+// Package scheduler runs each server's test at its interval, followed by a trace if auto-trace is on.
 package scheduler
 
 import (
@@ -14,13 +13,12 @@ import (
 	"i-tracker/internal/trace"
 )
 
-// Scheduler verwaltet einen Zeitplan je Server. Ohne Start sind Update und
-// Remove wirkungslos (Scheduler per Konfiguration abgeschaltet).
+// Scheduler keeps one schedule per server; without Start (disabled by config), Update and Remove do nothing.
 type Scheduler struct {
 	store  *store.Store
 	runner *iperf.Runner
 	tracer *trace.Tracer
-	// minute ist die Einheit von schedule_interval_minutes (in Tests verkürzt).
+	// minute is the unit of schedule_interval_minutes (shortened in tests).
 	minute time.Duration
 
 	mu      sync.Mutex
@@ -36,12 +34,12 @@ type job struct {
 	cancel   context.CancelFunc
 }
 
-// New erstellt einen (noch nicht gestarteten) Scheduler.
+// New creates a scheduler that is not yet started.
 func New(st *store.Store, runner *iperf.Runner, tracer *trace.Tracer) *Scheduler {
 	return &Scheduler{store: st, runner: runner, tracer: tracer, minute: time.Minute, jobs: map[int64]*job{}}
 }
 
-// Start plant alle aktiven Server mit eingeschaltetem Zeitplan ein.
+// Start schedules all enabled servers with schedule on.
 func (s *Scheduler) Start(ctx context.Context) error {
 	servers, err := s.store.ListServers(ctx, nil, 0, 1<<31-1)
 	if err != nil {
@@ -62,8 +60,7 @@ func (s *Scheduler) Start(ctx context.Context) error {
 	return nil
 }
 
-// Stop beendet alle Zeitpläne und wartet auf laufende Durchläufe. Laufende
-// Tests bricht der Runner beim eigenen Stop ab.
+// Stop ends all schedules and waits for running passes; the runner's own Stop aborts running tests.
 func (s *Scheduler) Stop() {
 	s.mu.Lock()
 	if !s.running {
@@ -77,16 +74,15 @@ func (s *Scheduler) Stop() {
 	s.wg.Wait()
 }
 
-// Running meldet, ob der Scheduler läuft.
+// Running reports whether the scheduler is running.
 func (s *Scheduler) Running() bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return s.running
 }
 
-// Update gleicht den Zeitplan eines Servers mit seinen Einstellungen ab
-// (nach Anlegen oder Ändern). Ein unverändertes Intervall läuft weiter, statt
-// neu zu beginnen. Liefert true, wenn der Server danach eingeplant ist.
+// Update syncs a server's schedule with its settings, keeping an unchanged interval running;
+// reports whether the server is scheduled.
 func (s *Scheduler) Update(sv *model.Server) bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -116,7 +112,7 @@ func (s *Scheduler) Update(sv *model.Server) bool {
 	return true
 }
 
-// Remove trägt einen Server aus (z. B. nach dem Löschen).
+// Remove unschedules a server, e.g. after deletion.
 func (s *Scheduler) Remove(serverID int64) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -131,8 +127,7 @@ func (s *Scheduler) removeLocked(serverID int64) {
 	}
 }
 
-// loop führt den Server im Intervall aus. Der erste Lauf erfolgt nach einem
-// Intervall; dauert ein Lauf länger, wird nicht parallel gestartet.
+// loop runs the server each interval; the first run after one interval, never overlapping.
 func (s *Scheduler) loop(ctx context.Context, serverID int64, interval time.Duration) {
 	t := time.NewTicker(interval)
 	defer t.Stop()
@@ -146,8 +141,7 @@ func (s *Scheduler) loop(ctx context.Context, serverID int64, interval time.Dura
 	}
 }
 
-// runOnce startet einen Test mit den Vorgaben des Servers, wartet auf das
-// Ergebnis und verfolgt bei aktiviertem Auto-Trace anschließend die Route.
+// runOnce runs a test with the server's defaults, waits for it, then traces if auto-trace is on.
 func (s *Scheduler) runOnce(ctx context.Context, serverID int64) {
 	sv, err := s.store.ServerByID(ctx, serverID)
 	if err != nil || !sv.Enabled || !sv.ScheduleEnabled {

@@ -1,5 +1,4 @@
-// Package model enthält die Datenstrukturen der Anwendung. JSON-Felder sind
-// in snake_case benannt; optionale Felder sind Pointer und werden als null serialisiert.
+// Package model holds the data types; JSON is snake_case, optional fields are pointers (null).
 package model
 
 import (
@@ -9,7 +8,7 @@ import (
 	"i-tracker/internal/i18n"
 )
 
-// User ist ein Benutzerkonto.
+// User is a user account.
 type User struct {
 	ID             int64      `json:"id"`
 	Username       string     `json:"username"`
@@ -19,14 +18,13 @@ type User struct {
 	IsAdmin        bool       `json:"is_admin"`
 	CreatedAt      time.Time  `json:"created_at"`
 	LastLogin      *time.Time `json:"last_login"`
-	// MustChangePassword erzwingt einen Passwortwechsel vor jeder weiteren Nutzung.
+	// MustChangePassword forces a password change before any further use.
 	MustChangePassword bool `json:"must_change_password"`
-	// TokenVersion steht in jedem Sitzungs-Token; ist sie dort kleiner, ist das
-	// Token ungültig (nach Passwortwechsel oder „überall abmelden“).
+	// TokenVersion is in every session token; a lower one there is invalid (after password change or "sign out everywhere").
 	TokenVersion int64 `json:"-"`
 }
 
-// Protocol ist das Transportprotokoll eines iperf3-Tests.
+// Protocol is the transport protocol of an iperf3 test.
 type Protocol string
 
 const (
@@ -34,10 +32,10 @@ const (
 	ProtocolUDP Protocol = "udp"
 )
 
-// Valid meldet, ob p ein bekannter Wert ist.
+// Valid reports whether p is a known value.
 func (p Protocol) Valid() bool { return p == ProtocolTCP || p == ProtocolUDP }
 
-// Direction ist die Messrichtung eines iperf3-Tests.
+// Direction is the measuring direction of an iperf3 test.
 type Direction string
 
 const (
@@ -46,14 +44,13 @@ const (
 	DirectionBidirectional Direction = "bidirectional"
 )
 
-// Valid meldet, ob d ein bekannter Wert ist.
+// Valid reports whether d is a known value.
 func (d Direction) Valid() bool {
 	return d == DirectionDownload || d == DirectionUpload || d == DirectionBidirectional
 }
 
-// ServerSettings sind die vom Benutzer pflegbaren Felder eines Server-Profils.
-// Requests werden nur in diesen Teil dekodiert, sodass ID und Zeitstempel
-// nicht von außen überschrieben werden können.
+// ServerSettings are a server profile's editable fields; requests decode only into this,
+// so ID and timestamps cannot be overwritten.
 type ServerSettings struct {
 	Name              string    `json:"name"`
 	Host              string    `json:"host"`
@@ -65,15 +62,14 @@ type ServerSettings struct {
 	DefaultNumStreams int       `json:"default_num_streams"`
 	DefaultProtocol   Protocol  `json:"default_protocol"`
 	DefaultDirection  Direction `json:"default_direction"`
-	// DefaultUDPBandwidthMbps ist die Zielbandbreite für UDP-Tests (iperf3 -b);
-	// nil = iperf3-Standard von 1 Mbit/s.
+	// DefaultUDPBandwidthMbps is the UDP target bandwidth (iperf3 -b); nil = iperf3 default 1 Mbit/s.
 	DefaultUDPBandwidthMbps *float64 `json:"default_udp_bandwidth_mbps"`
 	ScheduleEnabled         bool     `json:"schedule_enabled"`
 	ScheduleIntervalMinutes int      `json:"schedule_interval_minutes"`
 	AutoTraceEnabled        bool     `json:"auto_trace_enabled"`
 }
 
-// DefaultServerSettings liefert die Vorgabewerte für ein neues Server-Profil.
+// DefaultServerSettings returns the defaults for a new server profile.
 func DefaultServerSettings() ServerSettings {
 	return ServerSettings{
 		Port:                    5201,
@@ -87,8 +83,7 @@ func DefaultServerSettings() ServerSettings {
 	}
 }
 
-// Validate checks the value ranges; the error (an *i18n.Error) names the
-// first invalid field.
+// Validate checks value ranges; the *i18n.Error names the first invalid field.
 func (s ServerSettings) Validate() error {
 	inRange := func(v, lo, hi int) bool { return v >= lo && v <= hi }
 	switch {
@@ -114,11 +109,10 @@ func (s ServerSettings) Validate() error {
 	return ValidateUDPBandwidth(s.DefaultUDPBandwidthMbps)
 }
 
-// MaxUDPBandwidthMbps ist die höchste zulässige UDP-Zielbandbreite (100 Gbit/s).
+// MaxUDPBandwidthMbps is the highest allowed UDP target bandwidth (100 Gbit/s).
 const MaxUDPBandwidthMbps = 100000
 
-// ValidateUDPBandwidth checks an optional UDP target bandwidth. 0 is not
-// allowed: iperf3 takes it as "unlimited" and floods the line.
+// ValidateUDPBandwidth checks an optional UDP target; 0 is rejected since iperf3 treats it as unlimited.
 func ValidateUDPBandwidth(v *float64) error {
 	if v != nil && (*v <= 0 || *v > MaxUDPBandwidthMbps) {
 		return i18n.E("err.input.udp_bandwidth", strconv.Itoa(MaxUDPBandwidthMbps))
@@ -126,7 +120,7 @@ func ValidateUDPBandwidth(v *float64) error {
 	return nil
 }
 
-// TestStatus ist der Ausführungsstatus eines Tests.
+// TestStatus is the execution status of a test.
 type TestStatus string
 
 const (
@@ -136,12 +130,12 @@ const (
 	StatusFailed    TestStatus = "failed"
 )
 
-// Valid meldet, ob s ein bekannter Wert ist.
+// Valid reports whether s is a known value.
 func (s TestStatus) Valid() bool {
 	return s == StatusPending || s == StatusRunning || s == StatusCompleted || s == StatusFailed
 }
 
-// TestResult sind die Messwerte eines abgeschlossenen Tests.
+// TestResult holds the measurements of a finished test.
 type TestResult struct {
 	DownloadBandwidthMbps     *float64 `json:"download_bandwidth_mbps"`
 	DownloadBytes             *int64   `json:"download_bytes"`
@@ -155,8 +149,7 @@ type TestResult struct {
 	CPUPercent                *float64 `json:"cpu_percent"`
 }
 
-// Test ist ein iperf3-Testlauf. Die Rohausgabe wird nur in der Detailansicht
-// geliefert (siehe TestDetail).
+// Test is an iperf3 run; raw output only comes with TestDetail.
 type Test struct {
 	ID              int64     `json:"id"`
 	ServerID        int64     `json:"server_id"`
@@ -164,23 +157,20 @@ type Test struct {
 	Direction       Direction `json:"direction"`
 	Duration        int       `json:"duration"`
 	ParallelStreams int       `json:"parallel_streams"`
-	// UDPBandwidthMbps ist die Zielbandbreite, mit der ein UDP-Test lief;
-	// nil bei TCP oder iperf3-Standard.
+	// UDPBandwidthMbps is the UDP target used; nil for TCP or the iperf3 default.
 	UDPBandwidthMbps *float64   `json:"udp_bandwidth_mbps"`
 	Status           TestStatus `json:"status"`
 	StartedAt        *time.Time `json:"started_at"`
 	CompletedAt      *time.Time `json:"completed_at"`
 	TestResult
-	// ErrorMessage is the reason of a failure in English (in older rows
-	// German); the web layer renders it in the request language with
-	// ErrorText, its language-neutral form (i18n.Msg, encoded).
+	// ErrorMessage is the failure in English (German in old rows); the web layer
+	// localizes it via ErrorText, the encoded i18n.Msg.
 	ErrorMessage *string   `json:"error_message"`
 	ErrorText    string    `json:"-"`
 	CreatedAt    time.Time `json:"created_at"`
 }
 
-// NewTestFromDefaults erstellt einen Test mit den Vorgaben des Servers
-// (für geplante Tests).
+// NewTestFromDefaults creates a test from the server's defaults (for scheduled tests).
 func NewTestFromDefaults(sv *Server) *Test {
 	t := &Test{
 		ServerID:        sv.ID,
@@ -195,14 +185,14 @@ func NewTestFromDefaults(sv *Server) *Test {
 	return t
 }
 
-// TestDetail ist ein Test inklusive Server-Profil und Rohausgabe.
+// TestDetail is a test with its server profile and raw output.
 type TestDetail struct {
 	Test
 	Server    Server  `json:"server"`
 	RawOutput *string `json:"raw_output"`
 }
 
-// TraceHop ist ein Hop einer Routenverfolgung inklusive Standortdaten.
+// TraceHop is one hop of a trace, with location data.
 type TraceHop struct {
 	ID              int64    `json:"id"`
 	HopNumber       int      `json:"hop_number"`
@@ -218,23 +208,21 @@ type TraceHop struct {
 	RTTMs           *float64 `json:"rtt_ms"`
 	PacketLoss      *float64 `json:"packet_loss"`
 	Responded       bool     `json:"responded"`
-	// GeoIPInterpolated ist true, wenn die Koordinaten von einem Nachbar-Hop
-	// übernommen wurden, weil die GeoIP-Datenbank die Adresse nicht kennt.
+	// GeoIPInterpolated: coordinates come from a neighbor hop because GeoIP does not know the address.
 	GeoIPInterpolated bool `json:"geoip_interpolated"`
 }
 
-// SetError records err as the reason the trace is incomplete: the English
-// text and its language-neutral form.
+// SetError records err (English text and language-neutral form) as why the trace is incomplete.
 func (t *Trace) SetError(err error) {
 	msg := err.Error()
 	t.ErrorMessage = &msg
 	t.ErrorText = i18n.MsgOf(err).Encode()
 }
 
-// HasLocation meldet, ob der Hop Koordinaten hat.
+// HasLocation reports whether the hop has coordinates.
 func (h TraceHop) HasLocation() bool { return h.Latitude != nil && h.Longitude != nil }
 
-// Trace ist eine Routenverfolgung, optional zu einem Test.
+// Trace is a route trace, optionally tied to a test.
 type Trace struct {
 	ID              int64    `json:"id"`
 	TestID          *int64   `json:"test_id"`
@@ -253,7 +241,7 @@ type Trace struct {
 	Hops         []TraceHop `json:"hops"`
 }
 
-// DashboardStats sind die Kennzahlen der Übersicht.
+// DashboardStats are the overview figures.
 type DashboardStats struct {
 	TotalServers    int        `json:"total_servers"`
 	ActiveServers   int        `json:"active_servers"`
@@ -264,8 +252,7 @@ type DashboardStats struct {
 	LastTestAt      *time.Time `json:"last_test_at"`
 }
 
-// ServerStats sind die Kennzahlen eines Servers. Mittelwerte beziehen sich
-// nur auf erfolgreiche Tests.
+// ServerStats are one server's figures; averages cover completed tests only.
 type ServerStats struct {
 	ServerID             int64      `json:"server_id"`
 	ServerName           string     `json:"server_name"`
@@ -279,7 +266,7 @@ type ServerStats struct {
 	LastTestAt           *time.Time `json:"last_test_at"`
 }
 
-// DatabaseStats sind die Datenbank-Kennzahlen der Administration.
+// DatabaseStats are the database figures for administration.
 type DatabaseStats struct {
 	TotalTests   int        `json:"total_tests"`
 	TotalServers int        `json:"total_servers"`
@@ -290,7 +277,7 @@ type DatabaseStats struct {
 	NewestTest   *time.Time `json:"newest_test"`
 }
 
-// PublicServer ist ein bekannter öffentlicher iperf3-Server.
+// PublicServer is a known public iperf3 server.
 type PublicServer struct {
 	Name        string `json:"name"`
 	Host        string `json:"host"`
@@ -300,7 +287,7 @@ type PublicServer struct {
 	Description string `json:"description"`
 }
 
-// Server ist ein iperf3-Server-Profil.
+// Server is an iperf3 server profile.
 type Server struct {
 	ID int64 `json:"id"`
 	ServerSettings

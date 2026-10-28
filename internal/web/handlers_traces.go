@@ -16,7 +16,7 @@ import (
 
 const msgTraceNotFound = "err.trace.not_found"
 
-// testTraces verhindert, dass für denselben Test mehrere Traces gleichzeitig laufen.
+// testTraces prevents concurrent traces for the same test.
 type testTraces struct {
 	mu      sync.Mutex
 	running map[int64]bool
@@ -38,7 +38,7 @@ func (tt *testTraces) done(testID int64) {
 	tt.mu.Unlock()
 }
 
-// handleStartTestTrace startet im Hintergrund einen Trace zum Server eines Tests.
+// handleStartTestTrace traces a test's server in the background.
 func (s *Server) handleStartTestTrace(w http.ResponseWriter, r *http.Request, _ *model.User) {
 	id, ok := pathID(w, r, "test_id")
 	if !ok {
@@ -99,7 +99,7 @@ func (s *Server) handleDeleteTestTrace(w http.ResponseWriter, r *http.Request, _
 	s.deleteTrace(w, r, s.store.DeleteTracesByTest(r.Context(), id))
 }
 
-// handleCreateTrace führt einen Trace ohne Test synchron aus (bis zu 90 s).
+// handleCreateTrace runs a standalone trace synchronously (up to 90 s).
 func (s *Server) handleCreateTrace(w http.ResponseWriter, r *http.Request, _ *model.User) {
 	def := trace.DefaultOptions()
 	req := struct {

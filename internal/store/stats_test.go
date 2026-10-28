@@ -49,7 +49,7 @@ func TestStats(t *testing.T) {
 	}
 	run(a, model.StatusCompleted, model.TestResult{DownloadBandwidthMbps: f64(100), UploadBandwidthMbps: f64(10), DownloadJitterMs: f64(1), UploadJitterMs: f64(3)})
 	run(a, model.StatusCompleted, model.TestResult{DownloadBandwidthMbps: f64(200), DownloadPacketLossPercent: f64(2)})
-	// Fehlgeschlagene und wartende Tests fließen nicht in die Mittelwerte ein.
+	// Failed and pending tests stay out of the averages.
 	run(a, model.StatusFailed, model.TestResult{DownloadBandwidthMbps: f64(9999)})
 	run(a, model.StatusPending, model.TestResult{})
 	run(b, model.StatusCompleted, model.TestResult{UploadBandwidthMbps: f64(50)})
@@ -62,10 +62,10 @@ func TestStats(t *testing.T) {
 		t.Errorf("Dashboard: %+v", d)
 	}
 	if !eqF(d.AvgDownloadMbps, 150) || !eqF(d.AvgUploadMbps, 30) {
-		t.Errorf("Dashboard-Mittelwerte: down %v up %v", *d.AvgDownloadMbps, *d.AvgUploadMbps)
+		t.Errorf("Dashboard averages: down %v up %v", *d.AvgDownloadMbps, *d.AvgUploadMbps)
 	}
 	if d, _ := st.DashboardStats(ctx, time.Now().Add(time.Hour)); d.TestsToday != 0 {
-		t.Errorf("tests_today nach Tagesbeginn in der Zukunft: %d", d.TestsToday)
+		t.Errorf("tests_today with day start in the future: %d", d.TestsToday)
 	}
 
 	list, err := st.ServerStats(ctx)
@@ -73,18 +73,18 @@ func TestStats(t *testing.T) {
 		t.Fatal(err)
 	}
 	if len(list) != 3 {
-		t.Fatalf("%d Server-Statistiken", len(list))
+		t.Fatalf("%d server stats", len(list))
 	}
 	sa := list[0]
 	if sa.ServerName != "a" || sa.TotalTests != 4 || sa.SuccessfulTests != 2 || sa.FailedTests != 1 {
 		t.Errorf("Server a: %+v", sa)
 	}
 	if !eqF(sa.AvgDownloadMbps, 150) || !eqF(sa.AvgUploadMbps, 10) || !eqF(sa.AvgJitterMs, 2) || !eqF(sa.AvgPacketLossPercent, 2) {
-		t.Errorf("Server a Mittelwerte: %+v", sa)
+		t.Errorf("Server a averages: %+v", sa)
 	}
 	empty := list[2]
 	if empty.TotalTests != 0 || empty.AvgDownloadMbps != nil || empty.AvgJitterMs != nil || empty.LastTestAt != nil {
-		t.Errorf("Server ohne Tests: %+v", empty)
+		t.Errorf("Server without tests: %+v", empty)
 	}
 
 	one, err := st.ServerStatsByID(ctx, b.ID)
@@ -92,7 +92,7 @@ func TestStats(t *testing.T) {
 		t.Errorf("ServerStatsByID: %+v, %v", one, err)
 	}
 	if _, err := st.ServerStatsByID(ctx, 999); err != ErrNotFound {
-		t.Errorf("unbekannter Server: %v", err)
+		t.Errorf("unknown server: %v", err)
 	}
 }
 

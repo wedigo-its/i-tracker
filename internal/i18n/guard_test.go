@@ -21,32 +21,20 @@ import (
 	"unicode"
 )
 
-// What these tests keep complete, and what to do when one fails:
-//
-//   - TestCatalogsComplete: de.json and en.json have the same keys, no empty
-//     text, the same verbs (%s), and German differs from English unless the
-//     text has no words or the key is in sameInBothLanguages. Fix: translate.
-//   - TestRuntimeKeysUseStringVerbs: message arguments are stored as text,
-//     so catalog texts use %s only.
-//   - TestKeysUsedInCodeExist / TestCatalogKeysUsed: every key literal in the
-//     Go code is in both catalogs, every catalog key is used.
-//   - TestNoGermanInGoCode: Go code is English (errors, logs, console output,
-//     flag help). German belongs in locales/de.json. Exceptions in
-//     germanAllowed, each with a reason.
-//   - TestUIErrorsAreKeyed: in the code whose errors reach the web UI, errors
-//     are made with E, Wrap or Foreign, never errors.New or fmt.Errorf.
-//   - TestKeyCalls: i18n.E, M, Wrap and web's writeError and message get a
-//     catalog key (a string literal or constant that is in both catalogs,
-//     never free text or a variable), with as many arguments as the text
-//     has verbs (Wrap: its cause is the last one). Fix: add the key to both
-//     catalogs, or pass the right arguments. TestKeyFuncsSignature keeps the
-//     list keyFuncs in line with the functions.
+// What the guards enforce (fix by translating, adding keys or passing the right arguments):
+//   - TestCatalogsComplete: same keys, no empty text, same verbs; de differs from en unless wordless or in sameInBothLanguages.
+//   - TestRuntimeKeysUseStringVerbs: arguments are stored as text, so %s only.
+//   - TestKeysUsedInCodeExist / TestCatalogKeysUsed: code keys exist in both catalogs; every catalog key is used.
+//   - TestNoGermanInGoCode: Go string literals are English; German goes to locales/de.json (exceptions: germanAllowed).
+//   - TestCommentsAreEnglish: comments (Go, web UI, SQL, config, Docker, cmd) and test messages are English (exceptions: commentAllowed).
+//   - TestUIErrorsAreKeyed: UI-facing errors use E, Wrap or Foreign, never errors.New or fmt.Errorf.
+//   - TestKeyCalls: keyFuncs get a literal/constant catalog key and one argument per verb (Wrap: cause last);
+//     TestKeyFuncsSignature keeps keyFuncs in line.
 
 // root is the repository root, seen from this package.
 var root = filepath.Join("..", "..")
 
-// sameInBothLanguages lists keys whose German text is rightly the same as the
-// English one.
+// sameInBothLanguages lists keys whose German text is rightly the English one.
 var sameInBothLanguages = map[string]string{}
 
 // germanAllowedFiles hold German on purpose.
@@ -54,14 +42,12 @@ var germanAllowedFiles = map[string]string{
 	"internal/i18n/legacy.go": "German messages stored by versions before 2026.10.28, recognized in old rows",
 }
 
-// germanAllowed are exact string literals that look German but are not
-// texts of this program.
+// germanAllowed are exact literals that look German but are not program texts.
 var germanAllowed = map[string]string{
 	"Düsseldorf": "city name in the demo route (GeoIP names it the same way)",
 }
 
-// uiErrorFiles produce errors that reach the web UI: in API responses, in the
-// iperf3 status, or stored as the error of a test or trace.
+// uiErrorFiles produce errors that reach the UI (API responses, iperf3 status, stored test/trace errors).
 var uiErrorFiles = []string{
 	"internal/web/*.go",
 	"internal/model/model.go",
@@ -77,8 +63,7 @@ var uiErrorExempt = map[string]string{
 	"internal/web/bootstrap.go": "errors of creating the first admin, returned to main and printed on the console",
 }
 
-// germanWords are words that mark a text as German (lowercase). Words that
-// are English too ("die", "an", "so") are left out.
+// germanWords mark a text as German (lowercase); words also English ("die", "an", "so") are left out.
 var germanWords = map[string]bool{}
 
 func init() {
@@ -114,7 +99,10 @@ type goFile struct {
 	file *ast.File
 }
 
-func goFiles(t *testing.T) []goFile {
+func goFiles(t *testing.T) []goFile { return parseGoFiles(t, false) }
+
+// parseGoFiles parses the repository's Go files with comments; tests only if withTests.
+func parseGoFiles(t *testing.T, withTests bool) []goFile {
 	t.Helper()
 	var out []goFile
 	err := filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
@@ -128,11 +116,11 @@ func goFiles(t *testing.T) []goFile {
 			}
 			return nil
 		}
-		if !strings.HasSuffix(path, ".go") || strings.HasSuffix(path, "_test.go") {
+		if !strings.HasSuffix(path, ".go") || !withTests && strings.HasSuffix(path, "_test.go") {
 			return nil
 		}
 		fset := token.NewFileSet()
-		f, err := parser.ParseFile(fset, path, nil, parser.SkipObjectResolution)
+		f, err := parser.ParseFile(fset, path, nil, parser.SkipObjectResolution|parser.ParseComments)
 		if err != nil {
 			return err
 		}
@@ -167,8 +155,7 @@ func (g goFile) stringLits(f func(value string, pos token.Position)) {
 
 var verbRe = regexp.MustCompile(`%(\[\d+\])?[-+# 0]*\d*(\.\d+)?[a-zA-Z%]`)
 
-// verbs returns the formatting verbs of a catalog text in order; "%%" is a
-// literal percent sign, not a verb.
+// verbs returns a catalog text's verbs in order, excluding "%%".
 func verbs(s string) []string {
 	var out []string
 	for _, v := range verbRe.FindAllString(s, -1) {
@@ -334,6 +321,353 @@ func TestLooksGerman(t *testing.T) {
 	}
 }
 
+// ---------- Comments and test messages ----------
+
+// commentSkipFiles are scanned files whose comments are not maintained here.
+var commentSkipFiles = map[string]string{
+	"internal/web/static/wedigo-tokens.css": "shared copy of the wedigo design tokens, changed only at its source",
+}
+
+// commentAllowed are findings that only look German, as "path: substring of the comment or message".
+var commentAllowed = map[string]string{}
+
+// comment is a comment or test message found in a source file.
+type comment struct {
+	line int
+	text string
+}
+
+// commentSources are the non-Go files checked, with their comment syntax.
+var commentSources = []struct {
+	glob    string
+	extract func(src string) []comment
+}{
+	{"internal/web/static/*.js", func(s string) []comment { return cComments(s, true) }},
+	{"internal/web/static/*.css", func(s string) []comment { return cComments(s, false) }},
+	{"internal/web/static/*.html", htmlComments},
+	{"internal/db/schema.sql", sqlComments},
+	{"config.example.yaml", func(s string) []comment { return hashComments(s, true) }},
+	{"docker-compose.yml", func(s string) []comment { return hashComments(s, true) }},
+	{"Dockerfile", func(s string) []comment { return hashComments(s, false) }},
+	{"*.cmd", cmdComments},
+}
+
+func lineAt(src string, off int) int { return 1 + strings.Count(src[:off], "\n") }
+
+// regexAfter are JavaScript keywords after which '/' starts a regular expression.
+var regexAfter = map[string]bool{"return": true, "typeof": true, "case": true, "in": true, "of": true,
+	"delete": true, "void": true, "throw": true, "new": true, "else": true, "do": true}
+
+// cComments returns the /* */ comments of src, plus // comments if js; strings,
+// template literals and (if js) regular expressions are skipped.
+func cComments(src string, js bool) []comment {
+	var out []comment
+	i := 0
+	var last byte           // last code byte that is not white space
+	word, open := "", false // identifier ending at last; open while it may go on
+	sig := func(c byte) {
+		if c == '_' || c == '$' || c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z' || c >= '0' && c <= '9' {
+			if !open {
+				word = ""
+			}
+			word, open = word+string(c), true
+		} else {
+			word, open = "", false
+		}
+		last = c
+	}
+	quoted := func(q byte) {
+		for i++; i < len(src) && src[i] != q && src[i] != '\n'; i++ {
+			if src[i] == '\\' {
+				i++
+			}
+		}
+		i++
+		sig('"')
+	}
+	var scan func(untilBrace bool)
+	template := func() {
+		for i++; i < len(src); i++ {
+			switch {
+			case src[i] == '\\':
+				i++
+			case src[i] == '`':
+				i++
+				sig('"')
+				return
+			case src[i] == '$' && i+1 < len(src) && src[i+1] == '{':
+				i += 2
+				sig('{')
+				scan(true)
+				i-- // the loop steps past the closing brace again
+			}
+		}
+	}
+	scan = func(untilBrace bool) {
+		depth := 0
+		for i < len(src) {
+			c, next := src[i], byte(0)
+			if i+1 < len(src) {
+				next = src[i+1]
+			}
+			switch {
+			case c == '/' && next == '*':
+				end := strings.Index(src[i+2:], "*/")
+				if end < 0 {
+					end = len(src) - i - 4
+				}
+				out = append(out, comment{lineAt(src, i), src[i : i+4+end]})
+				i += end + 4
+			case js && c == '/' && next == '/':
+				end := strings.IndexByte(src[i:], '\n')
+				if end < 0 {
+					end = len(src) - i
+				}
+				out = append(out, comment{lineAt(src, i), src[i : i+end]})
+				i += end
+			case js && c == '/' && (last == 0 || strings.IndexByte("(,=:[!&|?{};+-*%<>~^", last) >= 0 || regexAfter[word]):
+				class := false
+				for i++; i < len(src) && src[i] != '\n' && (src[i] != '/' || class); i++ {
+					switch src[i] {
+					case '\\':
+						i++
+					case '[':
+						class = true
+					case ']':
+						class = false
+					}
+				}
+				i++
+				sig('"')
+			case c == '\'' || c == '"':
+				quoted(c)
+			case js && c == '`':
+				template()
+			case c == '}' && untilBrace && depth == 0:
+				i++
+				return
+			default:
+				if c == '{' {
+					depth++
+				} else if c == '}' {
+					depth--
+				}
+				if c != ' ' && c != '\t' && c != '\r' && c != '\n' {
+					sig(c)
+				} else {
+					open = false
+				}
+				i++
+			}
+		}
+	}
+	scan(false)
+	return out
+}
+
+var htmlCommentRe = regexp.MustCompile(`(?s)<!--.*?-->`)
+
+func htmlComments(src string) []comment {
+	var out []comment
+	for _, m := range htmlCommentRe.FindAllStringIndex(src, -1) {
+		out = append(out, comment{lineAt(src, m[0]), src[m[0]:m[1]]})
+	}
+	return out
+}
+
+// lineComments returns, per line, the text from the first marker found by at to the line's end.
+func lineComments(src string, at func(line string) int) []comment {
+	var out []comment
+	for n, l := range strings.Split(src, "\n") {
+		if i := at(l); i >= 0 {
+			out = append(out, comment{n + 1, l[i:]})
+		}
+	}
+	return out
+}
+
+// sqlComments returns the -- comments outside '…' strings.
+func sqlComments(src string) []comment {
+	return lineComments(src, func(l string) int {
+		in := false
+		for i := 0; i+1 < len(l); i++ {
+			if l[i] == '\'' {
+				in = !in
+			} else if !in && l[i] == '-' && l[i+1] == '-' {
+				return i
+			}
+		}
+		return -1
+	})
+}
+
+// hashComments returns # comments: whole lines, and if inline also after white space outside quotes (YAML).
+func hashComments(src string, inline bool) []comment {
+	return lineComments(src, func(l string) int {
+		if !inline {
+			if strings.HasPrefix(strings.TrimSpace(l), "#") {
+				return strings.IndexByte(l, '#')
+			}
+			return -1
+		}
+		var q byte
+		for i := 0; i < len(l); i++ {
+			switch c := l[i]; {
+			case q != 0:
+				if c == q {
+					q = 0
+				}
+			case c == '\'' || c == '"':
+				q = c
+			case c == '#' && (i == 0 || l[i-1] == ' ' || l[i-1] == '\t'):
+				return i
+			}
+		}
+		return -1
+	})
+}
+
+// cmdComments returns rem and :: lines of a batch file.
+func cmdComments(src string) []comment {
+	return lineComments(src, func(l string) int {
+		s := strings.ToLower(strings.TrimLeft(strings.TrimSpace(l), "@"))
+		if strings.HasPrefix(s, "::") || s == "rem" || strings.HasPrefix(s, "rem ") || strings.HasPrefix(s, "rem\t") {
+			return 0
+		}
+		return -1
+	})
+}
+
+// testMessageFuncs are testing.TB methods whose texts are checked; formatted ones only in their format.
+var testMessageFuncs = map[string]bool{"Error": false, "Errorf": true, "Fatal": false, "Fatalf": true,
+	"Log": false, "Logf": true, "Skip": false, "Skipf": true}
+
+// goComments returns the comments of a Go file and, for tests, the texts of test messages.
+func goComments(g goFile) []comment {
+	var out []comment
+	for _, cg := range g.file.Comments {
+		for _, c := range cg.List {
+			out = append(out, comment{g.fset.Position(c.Pos()).Line, c.Text})
+		}
+	}
+	if !strings.HasSuffix(g.path, "_test.go") {
+		return out
+	}
+	ast.Inspect(g.file, func(n ast.Node) bool {
+		call, ok := n.(*ast.CallExpr)
+		if !ok {
+			return true
+		}
+		sel, ok := call.Fun.(*ast.SelectorExpr)
+		if !ok {
+			return true
+		}
+		formatted, ok := testMessageFuncs[sel.Sel.Name]
+		if _, isIdent := sel.X.(*ast.Ident); !ok || !isIdent {
+			return true
+		}
+		for i, arg := range call.Args {
+			if formatted && i > 0 {
+				break
+			}
+			if lit, ok := arg.(*ast.BasicLit); ok && lit.Kind == token.STRING {
+				if v, err := strconv.Unquote(lit.Value); err == nil {
+					out = append(out, comment{g.fset.Position(lit.Pos()).Line, v})
+				}
+			}
+		}
+		return true
+	})
+	return out
+}
+
+func TestCommentsAreEnglish(t *testing.T) {
+	var found []string
+	used := map[string]bool{}
+	check := func(path string, cs []comment) {
+		for _, c := range cs {
+			if !looksGerman(c.text) {
+				continue
+			}
+			allowed := false
+			for k := range commentAllowed {
+				if p, sub, _ := strings.Cut(k, ": "); p == path && strings.Contains(c.text, sub) {
+					used[k], allowed = true, true
+				}
+			}
+			if !allowed {
+				found = append(found, fmt.Sprintf("%s:%d: %s", path, c.line, strings.Join(strings.Fields(c.text), " ")))
+			}
+		}
+	}
+	for _, g := range parseGoFiles(t, true) {
+		check(g.path, goComments(g))
+	}
+	scanned := 0
+	for _, s := range commentSources {
+		matches, err := filepath.Glob(filepath.Join(root, filepath.FromSlash(s.glob)))
+		if err != nil || len(matches) == 0 {
+			t.Errorf("commentSources: %s matches no file", s.glob)
+		}
+		for _, m := range matches {
+			rel, _ := filepath.Rel(root, m)
+			rel = filepath.ToSlash(rel)
+			if _, skip := commentSkipFiles[rel]; skip {
+				used["skip "+rel] = true
+				continue
+			}
+			src, err := os.ReadFile(m)
+			if err != nil {
+				t.Fatal(err)
+			}
+			scanned++
+			check(rel, s.extract(string(src)))
+		}
+	}
+	if scanned < 10 {
+		t.Fatalf("only %d non-Go files scanned", scanned)
+	}
+	sort.Strings(found)
+	for _, f := range found {
+		t.Errorf("German comment or test message (write it in English): %s", f)
+	}
+	for k := range commentAllowed {
+		if !used[k] {
+			t.Errorf("commentAllowed: %q matches nothing any more, remove it", k)
+		}
+	}
+	for f := range commentSkipFiles {
+		if !used["skip "+f] {
+			t.Errorf("commentSkipFiles: %s is not scanned any more, remove it", f)
+		}
+	}
+}
+
+// TestCommentExtractors makes sure the extractors find comments, not code or literals.
+func TestCommentExtractors(t *testing.T) {
+	for _, c := range []struct {
+		name string
+		got  []comment
+		want string
+	}{
+		{"js", cComments("a = '// x' + \"/* y */\"; // one\nb = /\\/\\/[/]/g.test(s) / 2; /* two */\nc = `${d /* three */} // z`", true), "// one|/* two */|/* three */"},
+		{"css", cComments("a { background: url(http://x/y); } /* one */ b::after { content: '/* x */'; }", false), "/* one */"},
+		{"html", htmlComments("<p>a</p>\n<!-- one\n two -->"), "<!-- one\n two -->"},
+		{"sql", sqlComments("x TEXT DEFAULT '--', -- one\n-- two"), "-- one|-- two"},
+		{"yaml", hashComments("a: \"#x\" # one\nb: c#d\n  # two", true), "# one|# two"},
+		{"dockerfile", hashComments("# one\nRUN echo a # b", false), "# one"},
+		{"cmd", cmdComments("@echo off\r\n:: one\r\nREM two\r\nset rem=x"), ":: one\r|REM two\r"},
+	} {
+		var texts []string
+		for _, cm := range c.got {
+			texts = append(texts, cm.text)
+		}
+		if got := strings.Join(texts, "|"); got != c.want {
+			t.Errorf("%s: got %q, want %q", c.name, got, c.want)
+		}
+	}
+}
+
 func TestUIErrorsAreKeyed(t *testing.T) {
 	matched := 0
 	for _, g := range goFiles(t) {
@@ -377,17 +711,14 @@ func TestUIErrorsAreKeyed(t *testing.T) {
 // modulePath is the Go module of the repository (go.mod).
 const modulePath = "i-tracker"
 
-// keyFunc is a function whose argument number key is a catalog key, followed
-// by the arguments of the message. extra counts the arguments the function
-// adds itself: Wrap renders its cause as the last one.
+// keyFunc takes a catalog key at index key, then the message arguments; extra counts arguments it adds (Wrap: cause).
 type keyFunc struct {
 	pkg        string // package directory, relative to root
 	name       string
 	key, extra int
 }
 
-// keyFuncs take a catalog key. Calls inside package i18n are its own
-// plumbing (a key taken from an Error or Msg) and not checked.
+// keyFuncs take a catalog key; calls inside package i18n are plumbing and not checked.
 var keyFuncs = []keyFunc{
 	{"internal/i18n", "E", 0, 0},
 	{"internal/i18n", "M", 0, 0},
@@ -396,8 +727,7 @@ var keyFuncs = []keyFunc{
 	{"internal/web", "message", 1, 0},
 }
 
-// importName returns the name under which f imports the package of
-// repository directory dir, or "" when it does not import it.
+// importName returns f's import name for repository directory dir, or "" if not imported.
 func importName(f *ast.File, dir string) string {
 	for _, imp := range f.Imports {
 		if p, _ := strconv.Unquote(imp.Path.Value); p == modulePath+"/"+dir {
@@ -473,11 +803,8 @@ func stringConsts(files []goFile) map[string]map[string]string {
 	return out
 }
 
-// checkKeyCalls checks every call of a keyFunc: the key is a string literal
-// or a string constant of the package (a function of keyFuncs may also pass
-// on its own key parameter), it is in both catalogs, and the number of
-// message arguments equals the number of verbs of its text in de.json and
-// en.json. It returns the problems and the number of calls checked.
+// checkKeyCalls checks each keyFunc call: key is a literal or package constant (or a keyFunc's own
+// key parameter), exists in both catalogs, and gets one argument per verb; returns problems and count.
 func checkKeyCalls(files []goFile) (problems []string, checked int) {
 	consts := stringConsts(files)
 	for _, g := range files {
@@ -557,8 +884,7 @@ func TestKeyCalls(t *testing.T) {
 	}
 }
 
-// TestKeyFuncsSignature keeps keyFuncs in line with the functions: the
-// argument at index key is the parameter "key", followed by "args ...any".
+// TestKeyFuncsSignature checks that each keyFunc has "key" at index key, then "args ...any".
 func TestKeyFuncsSignature(t *testing.T) {
 	files := goFiles(t)
 	for _, kf := range keyFuncs {

@@ -1,5 +1,5 @@
-// Package iperf führt iperf3-Tests aus, wertet deren JSON-Stream-Ausgabe aus
-// und hält den Live-Status laufender Tests vor.
+// Package iperf runs iperf3 tests, parses their JSON stream output and keeps
+// the live status of running tests.
 package iperf
 
 import (
@@ -22,11 +22,11 @@ import (
 	"i-tracker/internal/store"
 )
 
-// liveRetention ist die Zeit, die der Live-Status nach Testende abrufbar
-// bleibt, damit die Oberfläche die Endwerte anzeigen kann.
+// liveRetention keeps the live status after a test ends so the UI can show the
+// final values.
 const liveRetention = 10 * time.Second
 
-// LiveStatus ist der Zwischenstand eines wartenden oder laufenden Tests.
+// LiveStatus is the interim state of a pending or running test.
 type LiveStatus struct {
 	ServerID            int64
 	Status              model.TestStatus
@@ -37,12 +37,12 @@ type LiveStatus struct {
 	CurrentUploadMbps   float64
 }
 
-// Runner führt Tests nacheinander aus – es läuft immer nur ein iperf3 gleichzeitig.
+// Runner runs tests one at a time; only one iperf3 runs at once.
 type Runner struct {
 	store      *store.Store
 	cmdMu      sync.RWMutex
-	configured string   // fest konfigurierter Pfad; dann keine Installation
-	command    []string // iperf3-Binary, ggf. mit festen Vorab-Argumenten (Tests)
+	configured string   // fixed configured path; disables installation
+	command    []string // iperf3 binary, optionally with fixed leading args (tests)
 	status     Status
 	sem        chan struct{}
 	ctx        context.Context
@@ -53,14 +53,14 @@ type Runner struct {
 	live map[int64]*LiveStatus
 }
 
-// NewRunner erstellt einen Runner. command ist der iperf3-Aufruf, in der
-// Regel nur der Pfad zur Binary.
+// NewRunner creates a Runner; command is the iperf3 call, usually just the
+// binary path.
 func NewRunner(st *store.Store, command ...string) *Runner {
 	ctx, cancel := context.WithCancel(context.Background())
 	return &Runner{
 		store:   st,
 		command: command,
-		status:  Status{Path: command[0]}, // geprüft wird erst in Prepare
+		status:  Status{Path: command[0]}, // checked in Prepare
 		sem:     make(chan struct{}, 1),
 		ctx:     ctx,
 		cancel:  cancel,
@@ -68,8 +68,8 @@ func NewRunner(st *store.Store, command ...string) *Runner {
 	}
 }
 
-// Submit reiht einen gespeicherten, wartenden Test zur Ausführung ein. Der
-// zurückgegebene Kanal wird geschlossen, sobald das Ergebnis gespeichert ist.
+// Submit queues a stored pending test; the returned channel closes once the
+// result is saved.
 func (r *Runner) Submit(t *model.Test) <-chan struct{} {
 	r.setLive(t.ID, &LiveStatus{ServerID: t.ServerID, Status: model.StatusPending, TotalSeconds: t.Duration})
 	done := make(chan struct{})
@@ -82,14 +82,13 @@ func (r *Runner) Submit(t *model.Test) <-chan struct{} {
 	return done
 }
 
-// Stop bricht laufende und wartende Tests ab und wartet, bis deren Status gespeichert ist.
+// Stop aborts running and pending tests and waits until their status is saved.
 func (r *Runner) Stop() {
 	r.cancel()
 	r.wg.Wait()
 }
 
-// Live liefert den Live-Status eines Tests, solange er wartet, läuft oder
-// gerade beendet wurde.
+// Live returns a test's live status while pending, running or just finished.
 func (r *Runner) Live(id int64) (LiveStatus, bool) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
@@ -100,8 +99,8 @@ func (r *Runner) Live(id int64) (LiveStatus, bool) {
 	return *l, true
 }
 
-// LiveAll liefert den Live-Status aller wartenden, laufenden und gerade
-// beendeten Tests (Test-ID → Status).
+// LiveAll returns the live status of all pending, running and just finished
+// tests, keyed by test ID.
 func (r *Runner) LiveAll() map[int64]LiveStatus {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
@@ -132,10 +131,9 @@ func (r *Runner) deleteLive(id int64) {
 	r.mu.Unlock()
 }
 
-// process wartet auf den Ausführungs-Slot, führt den Test aus und speichert das Ergebnis.
+// process waits for the run slot, runs the test and saves the result.
 func (r *Runner) process(id int64) {
-	// Datenbankzugriffe laufen bewusst ohne r.ctx, damit ein Abbruch beim
-	// Beenden noch gespeichert wird.
+	// DB access deliberately skips r.ctx so an abort on shutdown is still saved.
 	ctx := context.Background()
 
 	select {
@@ -148,7 +146,7 @@ func (r *Runner) process(id int64) {
 
 	t, err := r.store.TestByID(ctx, id)
 	if err != nil {
-		// Test wurde zwischenzeitlich gelöscht (oder DB-Fehler): nichts mehr zu tun.
+		// Test deleted meanwhile (or DB error): nothing left to do.
 		if !errors.Is(err, store.ErrNotFound) {
 			slog.Error("Test could not be loaded", "test", id, "error", err)
 		}
@@ -298,8 +296,7 @@ func (r *Runner) execute(t *model.Test, sv *model.Server) (res model.TestResult,
 	return res, nil, raw
 }
 
-// trackProgress aktualisiert Fortschritt und Laufzeit alle 500 ms. Die
-// zurückgegebene Funktion beendet die Aktualisierung.
+// trackProgress updates progress and elapsed time every 500 ms until stop is called.
 func (r *Runner) trackProgress(id int64, duration int) (stop func()) {
 	start := time.Now()
 	done := make(chan struct{})
@@ -322,8 +319,8 @@ func (r *Runner) trackProgress(id int64, duration int) (stop func()) {
 	return func() { close(done) }
 }
 
-// Args baut die iperf3-Argumente für einen Test. Download nutzt -R (der
-// Server sendet), Upload den Normalmodus (der Client sendet).
+// Args builds the iperf3 arguments for a test. Download uses -R (server
+// sends), upload the normal mode (client sends).
 func Args(host string, port int, t *model.Test) []string {
 	args := []string{
 		"-c", host,

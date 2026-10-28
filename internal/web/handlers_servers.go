@@ -60,7 +60,7 @@ func (s *Server) handleCreateServer(w http.ResponseWriter, r *http.Request, _ *m
 	writeJSON(w, r, http.StatusCreated, sv)
 }
 
-// handleUpdateServer übernimmt nur die im Body enthaltenen Felder (partielles Update).
+// handleUpdateServer applies only the fields present in the body (partial update).
 func (s *Server) handleUpdateServer(w http.ResponseWriter, r *http.Request, _ *model.User) {
 	sv, ok := s.loadServer(w, r)
 	if !ok {
@@ -103,8 +103,7 @@ func (s *Server) handleDeleteServer(w http.ResponseWriter, r *http.Request, _ *m
 	w.WriteHeader(http.StatusNoContent)
 }
 
-// loadServer lädt den Server aus dem Pfadparameter server_id; bei Fehlern ist
-// die Antwort bereits geschrieben.
+// loadServer loads the server_id path server; on failure the response is already written.
 func (s *Server) loadServer(w http.ResponseWriter, r *http.Request) (*model.Server, bool) {
 	id, ok := pathID(w, r, "server_id")
 	if !ok {

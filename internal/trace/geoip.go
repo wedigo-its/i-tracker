@@ -11,43 +11,42 @@ import (
 	"github.com/oschwald/geoip2-golang"
 )
 
-// Herkunft der geladenen Datenbank.
+// Source of the loaded database.
 const (
-	SourceDBIP    = "dbip"    // DB-IP City Lite (CC BY 4.0, ohne Account)
-	SourceMaxMind = "maxmind" // MaxMind GeoLite2/GeoIP2 City (Account nötig)
+	SourceDBIP    = "dbip"    // DB-IP City Lite (CC BY 4.0, no account)
+	SourceMaxMind = "maxmind" // MaxMind GeoLite2/GeoIP2 City (account required)
 )
 
-// GeoIP schlägt Standorte in einer City-Datenbank im MMDB-Format nach (DB-IP
-// City Lite oder MaxMind GeoLite2 City). Die Datenbank lässt sich zur Laufzeit
-// austauschen (siehe GeoUpdater). Ein nil-*GeoIP und eine leere GeoIP sind
-// gültig und liefern keine Standorte.
+// GeoIP looks up locations in an MMDB city database (DB-IP City Lite or MaxMind
+// GeoLite2 City), swappable at runtime (see GeoUpdater). A nil or empty GeoIP
+// is valid and returns no locations.
 type GeoIP struct {
 	mu     sync.RWMutex
 	reader *geoip2.Reader
 	path   string
 }
 
-// Location ist der Standort einer IP-Adresse.
+// Location is the location of an IP address.
 type Location struct {
 	Latitude, Longitude float64
 	City, Country       string
 	CountryCode         string
 }
 
-// GeoInfo beschreibt die geladene Datenbank für die Oberfläche.
+// GeoInfo describes the loaded database for the UI.
 type GeoInfo struct {
-	// Source ist SourceDBIP, SourceMaxMind oder leer (keine Datenbank).
+	// Source is SourceDBIP, SourceMaxMind or empty (no database).
 	Source string `json:"source"`
-	// BuildDate ist das Erstellungsdatum der Datenbank (YYYY-MM-DD).
+	// BuildDate is the database build date (YYYY-MM-DD).
 	BuildDate string `json:"build_date,omitempty"`
-	// Updating ist true, solange ein Download läuft.
+	// Updating is true while a download runs.
 	Updating bool `json:"updating"`
 }
 
-// NewGeoIP liefert eine leere, später befüllbare GeoIP.
+// NewGeoIP returns an empty GeoIP to be loaded later.
 func NewGeoIP() *GeoIP { return &GeoIP{} }
 
-// OpenGeoIP öffnet die erste vorhandene Datenbank aus paths.
+// OpenGeoIP opens the first existing database in paths.
 func OpenGeoIP(paths ...string) (*GeoIP, string, error) {
 	g := NewGeoIP()
 	p, err := g.Load(paths...)
@@ -57,8 +56,7 @@ func OpenGeoIP(paths ...string) (*GeoIP, string, error) {
 	return g, p, nil
 }
 
-// Load öffnet die erste vorhandene Datenbank aus paths und ersetzt die
-// bisher geladene.
+// Load opens the first existing database in paths, replacing the loaded one.
 func (g *GeoIP) Load(paths ...string) (string, error) {
 	for _, p := range paths {
 		if _, err := os.Stat(p); err != nil {
@@ -80,10 +78,9 @@ func (g *GeoIP) Load(paths ...string) (string, error) {
 	return "", os.ErrNotExist
 }
 
-// replace ersetzt die Datei dst durch die bereits geprüfte Datei tmp und lädt
-// sie. Die alte Datenbank wird vorher geschlossen, weil Windows eine
-// eingeblendete (mmap) Datei nicht überschreiben lässt; Abfragen warten so
-// lange auf die Sperre.
+// replace moves the verified file tmp over dst and loads it. The old database
+// is closed first because Windows cannot overwrite a mapped (mmap) file;
+// lookups wait on the lock meanwhile.
 func (g *GeoIP) replace(tmp, dst string) error {
 	g.mu.Lock()
 	defer g.mu.Unlock()
@@ -102,7 +99,7 @@ func (g *GeoIP) replace(tmp, dst string) error {
 	return nil
 }
 
-// Close schließt die Datenbank.
+// Close closes the database.
 func (g *GeoIP) Close() error {
 	if g == nil {
 		return nil
@@ -117,7 +114,7 @@ func (g *GeoIP) Close() error {
 	return err
 }
 
-// Loaded liefert Herkunft und Pfad der geladenen Datenbank (leer = keine).
+// Loaded returns source and path of the loaded database (empty = none).
 func (g *GeoIP) Loaded() (source, path string) {
 	if g == nil {
 		return "", ""
@@ -130,7 +127,7 @@ func (g *GeoIP) Loaded() (source, path string) {
 	return sourceOf(g.reader.Metadata().DatabaseType), g.path
 }
 
-// Info liefert Herkunft und Erstellungsdatum der geladenen Datenbank.
+// Info returns source and build date of the loaded database.
 func (g *GeoIP) Info() GeoInfo {
 	if g == nil {
 		return GeoInfo{}
@@ -147,8 +144,7 @@ func (g *GeoIP) Info() GeoInfo {
 	}
 }
 
-// Lookup liefert den Standort von ip oder nil, wenn er unbekannt ist (z. B.
-// bei privaten Adressen).
+// Lookup returns ip's location, or nil if unknown (e.g. private addresses).
 func (g *GeoIP) Lookup(ip string) *Location {
 	parsed := net.ParseIP(ip)
 	if g == nil || parsed == nil {
@@ -172,10 +168,10 @@ func (g *GeoIP) Lookup(ip string) *Location {
 	}
 }
 
-// errNotCity meldet eine Datenbank, die keine Standorte auf Stadtebene enthält.
+// errNotCity reports a database without city-level locations.
 var errNotCity = errors.New("not a city database")
 
-// openCity öffnet eine MMDB-Datei und prüft, dass sie Stadt-Standorte liefert.
+// openCity opens an MMDB file and checks that it is a city database.
 func openCity(path string) (*geoip2.Reader, error) {
 	r, err := geoip2.Open(path)
 	if err != nil {
@@ -188,7 +184,7 @@ func openCity(path string) (*geoip2.Reader, error) {
 	return r, nil
 }
 
-// sourceOf ordnet den Datenbanktyp aus den MMDB-Metadaten einer Herkunft zu.
+// sourceOf maps the MMDB metadata database type to a source.
 func sourceOf(dbType string) string {
 	if strings.HasPrefix(dbType, "DBIP") {
 		return SourceDBIP

@@ -15,25 +15,22 @@ import (
 	"i-tracker/internal/store"
 )
 
-// Sitzungs-Cookie: unter TLS mit __Host--Präfix (nur mit Secure erlaubt),
-// sonst ohne. Gelesen werden beide Namen.
+// Session cookie: __Host- prefix under TLS only (requires Secure); both names are read.
 const (
 	sessionCookie       = "iperf3_session"
 	sessionCookieSecure = "__Host-iperf3_session"
 	csrfHeader          = "X-CSRF-Token"
 )
 
-// userHandler ist ein Handler, der den angemeldeten Benutzer erhält.
+// userHandler receives the signed-in user.
 type userHandler func(w http.ResponseWriter, r *http.Request, u *model.User)
 
-// requireUser verlangt eine gültige Sitzung (Cookie oder Bearer-Token). Ein
-// Benutzer mit erzwungenem Passwortwechsel wird abgewiesen.
+// requireUser requires a valid session and rejects users with a pending password change.
 func (s *Server) requireUser(h userHandler) http.Handler {
 	return s.withUser(h, false)
 }
 
-// requireUserPending lässt auch Benutzer mit ausstehendem Passwortwechsel zu
-// (für /auth/me und /auth/change-password).
+// requireUserPending also admits a pending password change (/auth/me, /auth/change-password).
 func (s *Server) requireUserPending(h userHandler) http.Handler {
 	return s.withUser(h, true)
 }
@@ -48,12 +45,9 @@ func (s *Server) withUser(h userHandler, allowPending bool) http.Handler {
 	})
 }
 
-// optionalUser ist für lesende Endpunkte der Oberfläche. Mit auth.public_read
-// ruft es h auch für Gäste auf, dann mit u == nil; ohne public_read verhält
-// es sich wie requireUser. Eine ungültige, abgelaufene oder gesperrte Sitzung
-// gilt dabei als Gast (kein 401), ebenso ein ausstehender Passwortwechsel.
-// Nur für GET-Routen gedacht: ändernde Endpunkte nutzen requireUser, damit
-// CSRF-Prüfung und Anmeldepflicht greifen.
+// optionalUser is for read-only GET routes: with auth.public_read it calls h
+// with u == nil for guests (invalid sessions count as guests, no 401);
+// otherwise it acts like requireUser. Mutating routes must use requireUser.
 func (s *Server) optionalUser(h userHandler) http.Handler {
 	if !s.publicRead {
 		return s.requireUser(h)
@@ -74,7 +68,7 @@ func (s *Server) optionalUser(h userHandler) http.Handler {
 	})
 }
 
-// requireAdmin verlangt eine gültige Sitzung eines Admins.
+// requireAdmin requires an admin session.
 func (s *Server) requireAdmin(h userHandler) http.Handler {
 	return s.requireUser(func(w http.ResponseWriter, r *http.Request, u *model.User) {
 		if !u.IsAdmin {
@@ -92,18 +86,15 @@ var (
 	errMustChangePass = i18n.E("err.auth.password_change_required")
 )
 
-// session ist die geprüfte Sitzung einer Anfrage.
+// session is a request's validated session.
 type session struct {
 	token      string
 	claims     auth.Claims
 	fromCookie bool
 }
 
-// authenticate prüft die Sitzung der Anfrage und lädt den zugehörigen
-// Benutzer. Schlägt das fehl, ist die Fehlerantwort bereits geschrieben und
-// ok ist false. Eine Cookie-Sitzung, deren halbe Laufzeit verstrichen ist,
-// wird dabei verlängert (gleitende Gültigkeit); Bearer-Tokens behalten ihre
-// feste Laufzeit, der Client meldet sich danach neu an.
+// authenticate loads the session's user; if !ok the error response is written.
+// Cookie sessions slide (renewSession); Bearer tokens keep a fixed lifetime.
 func (s *Server) authenticate(w http.ResponseWriter, r *http.Request, allowPending bool) (u *model.User, ok bool) {
 	u, sess, err := s.userForRequest(r, allowPending)
 	if err == nil {
@@ -125,8 +116,7 @@ func (s *Server) authenticate(w http.ResponseWriter, r *http.Request, allowPendi
 	return nil, false
 }
 
-// renewSession verlängert eine Cookie-Sitzung, deren halbe Laufzeit
-// verstrichen ist.
+// renewSession renews a cookie session past half its lifetime.
 func (s *Server) renewSession(w http.ResponseWriter, r *http.Request, sess session) {
 	if !sess.fromCookie || !s.tokens.NeedsRenewal(sess.claims) {
 		return
@@ -136,16 +126,14 @@ func (s *Server) renewSession(w http.ResponseWriter, r *http.Request, sess sessi
 	}
 }
 
-// userForRequest prüft Sitzung, CSRF-Token (nur bei Cookie-Anmeldung und
-// ändernden Methoden) und den Passwortwechsel-Zwang.
+// userForRequest checks session, CSRF token (cookie + unsafe method) and forced password change.
 func (s *Server) userForRequest(r *http.Request, allowPending bool) (*model.User, session, error) {
 	token, fromCookie := sessionToken(r)
 	u, claims, err := s.userForToken(r.Context(), token)
 	if err != nil {
 		return nil, session{}, err
 	}
-	// Bearer-Tokens schickt der Browser nie von selbst mit, Cookies schon –
-	// daher nur dort zusätzlich das CSRF-Token prüfen.
+	// Browsers send cookies automatically, never Bearer tokens: CSRF only applies to cookies.
 	if fromCookie && !safeMethod(r.Method) && !s.tokens.CheckCSRF(claims.SessionID, r.Header.Get(csrfHeader)) {
 		return nil, session{}, errCSRF
 	}
@@ -155,10 +143,8 @@ func (s *Server) userForRequest(r *http.Request, allowPending bool) (*model.User
 	return u, session{token: token, claims: claims, fromCookie: fromCookie}, nil
 }
 
-// userForToken prüft token und lädt den zugehörigen, aktiven Benutzer.
-// Abgemeldete Sitzungen und Tokens mit veralteter Token-Version (nach
-// Passwortwechsel oder „überall abmelden“) gelten nicht. Fehler sind
-// errUnauthorized, errInactive oder Datenbankfehler.
+// userForToken loads the token's active user; revoked sessions and stale
+// token versions yield errUnauthorized.
 func (s *Server) userForToken(ctx context.Context, token string) (*model.User, auth.Claims, error) {
 	if token == "" {
 		return nil, auth.Claims{}, errUnauthorized
@@ -183,9 +169,8 @@ func (s *Server) userForToken(ctx context.Context, token string) (*model.User, a
 	return u, claims, nil
 }
 
-// clientAddr liefert die Adresse des Clients für die Bremse bei
-// Fehlanmeldungen. Bewusst nur RemoteAddr: X-Forwarded-For ließe sich ohne
-// konfigurierten vertrauenswürdigen Proxy beliebig fälschen.
+// clientAddr keys the sign-in limiter. RemoteAddr only: X-Forwarded-For is
+// spoofable without a configured trusted proxy.
 func clientAddr(r *http.Request) string {
 	host, _, err := net.SplitHostPort(r.RemoteAddr)
 	if err != nil {
@@ -194,8 +179,7 @@ func clientAddr(r *http.Request) string {
 	return host
 }
 
-// sessionToken liefert das Sitzungs-Token aus dem Authorization-Header
-// (API-Clients) oder dem Sitzungs-Cookie (Oberfläche).
+// sessionToken reads the Bearer header (API clients) or the session cookie (UI).
 func sessionToken(r *http.Request) (token string, fromCookie bool) {
 	if t := bearerToken(r); t != "" {
 		return t, false
@@ -220,14 +204,12 @@ func safeMethod(m string) bool {
 	return m == http.MethodGet || m == http.MethodHead || m == http.MethodOptions
 }
 
-// isTLS meldet, ob die Anfrage per HTTPS kam – direkt oder über einen
-// Reverse-Proxy, der X-Forwarded-Proto setzt.
+// isTLS reports HTTPS, directly or via X-Forwarded-Proto from a reverse proxy.
 func isTLS(r *http.Request) bool {
 	return r.TLS != nil || strings.EqualFold(r.Header.Get("X-Forwarded-Proto"), "https")
 }
 
-// setSessionCookie setzt das Sitzungs-Cookie (HttpOnly, SameSite=Lax, unter
-// TLS Secure mit __Host--Präfix). maxAge ist die Sitzungsdauer.
+// setSessionCookie sets an HttpOnly, SameSite=Lax cookie (Secure and __Host- under TLS).
 func setSessionCookie(w http.ResponseWriter, r *http.Request, token string, maxAge time.Duration) {
 	secure := isTLS(r)
 	name := sessionCookie
@@ -245,7 +227,7 @@ func setSessionCookie(w http.ResponseWriter, r *http.Request, token string, maxA
 	})
 }
 
-// clearSessionCookies löscht beide möglichen Sitzungs-Cookies.
+// clearSessionCookies deletes both cookie names.
 func clearSessionCookies(w http.ResponseWriter, r *http.Request) {
 	for _, name := range []string{sessionCookie, sessionCookieSecure} {
 		http.SetCookie(w, &http.Cookie{
@@ -255,10 +237,8 @@ func clearSessionCookies(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// crossOriginGuard weist ändernde Anfragen ab, die erkennbar von einer
-// fremden Seite stammen (Sec-Fetch-Site bzw. Origin), wie
-// net/http.CrossOriginProtection ab Go 1.25. Ergänzt das CSRF-Token und
-// schützt zusätzlich den Login selbst.
+// crossOriginGuard rejects cross-origin unsafe requests (Sec-Fetch-Site/Origin),
+// like Go 1.25 http.CrossOriginProtection; also covers the login itself.
 func crossOriginGuard(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if !safeMethod(r.Method) && crossOrigin(r) {
@@ -274,7 +254,7 @@ func crossOrigin(r *http.Request) bool {
 	case "same-origin", "none":
 		return false
 	case "":
-		// Ältere Browser oder Nicht-Browser-Clients: Origin prüfen, falls vorhanden.
+		// Older browsers or non-browser clients: check Origin if present.
 		origin := r.Header.Get("Origin")
 		if origin == "" {
 			return false
@@ -286,8 +266,7 @@ func crossOrigin(r *http.Request) bool {
 	}
 }
 
-// securityHeaders setzt CSP und weitere Schutz-Header für alle Antworten.
-// imgSrc enthält zusätzliche Bildquellen (eigener Kachelserver).
+// securityHeaders sets CSP and other security headers; imgSrc adds image sources (tile server).
 func securityHeaders(next http.Handler, imgSrc string) http.Handler {
 	csp := "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:" + imgSrc +
 		"; connect-src 'self'; font-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'"

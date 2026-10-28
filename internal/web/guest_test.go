@@ -15,18 +15,17 @@ import (
 	"i-tracker/internal/store"
 )
 
-// Einordnung der API-Routen für die Gastansicht (auth.public_read). Jede
-// GET-Route aus server.go muss in genau einer Liste stehen, damit neue
-// Routen bewusst eingeordnet werden.
+// Guest view (auth.public_read) classes: every GET route must be in exactly one
+// list so new routes get classified deliberately.
 var (
-	// alwaysPublic ist auch ohne public_read ohne Anmeldung erreichbar.
+	// alwaysPublic needs no sign-in even without public_read.
 	alwaysPublic = map[string]bool{
 		"/api/info":                  true,
 		"/api/auth/status":           true,
 		"/api/public-servers":        true,
 		"/api/public-servers/search": true,
 	}
-	// guestReadable sind die lesenden Endpunkte der Gastansicht.
+	// guestReadable are the guest view's read endpoints.
 	guestReadable = map[string]bool{
 		"/api/status":                          true,
 		"/api/servers":                         true,
@@ -44,15 +43,15 @@ var (
 		"/api/traces/{trace_id}":               true,
 		"/api/traces/test/{test_id}":           true,
 	}
-	// userOnlyGet verlangt auch mit public_read eine Anmeldung.
+	// userOnlyGet needs sign-in even with public_read.
 	userOnlyGet = map[string]bool{
 		"/api/auth/me":              true,
 		"/api/auth/users":           true,
 		"/api/admin/stats/database": true,
-		// Startet eine Traceroute (eigener Test, Fehler als SSE-Event).
+		// Starts a trace (own test, errors as SSE events).
 		"/api/live-trace/stream/{destination}": true,
 	}
-	// publicWrite sind ändernde Routen, die ohne Anmeldung erreichbar sein müssen.
+	// publicWrite are mutating routes that must work without sign-in.
 	publicWrite = map[string]bool{
 		"POST /api/auth/login":  true,
 		"POST /api/auth/logout": true,
@@ -61,7 +60,7 @@ var (
 
 type route struct{ method, pattern string }
 
-// apiRoutes liefert alle API-Routen aus der Registrierung in server.go (Routes).
+// apiRoutes returns all registered API routes (Routes).
 func apiRoutes(t *testing.T) []route {
 	t.Helper()
 	var out []route
@@ -72,13 +71,12 @@ func apiRoutes(t *testing.T) []route {
 		}
 	}
 	if len(out) < 30 {
-		t.Fatalf("nur %d Routen registriert", len(out))
+		t.Fatalf("only %d routes registered", len(out))
 	}
 	return out
 }
 
-// TestRouteAccessMatchesGuestLists gleicht die Zugriffsstufe aus der Registrierung
-// (Grundlage der Produktdokumentation) mit den Listen dieses Tests ab.
+// TestRouteAccessMatchesGuestLists checks the registered access levels (used in the product docs) against these lists.
 func TestRouteAccessMatchesGuestLists(t *testing.T) {
 	for _, r := range Routes() {
 		method, pattern, _ := strings.Cut(r.Pattern, " ")
@@ -95,12 +93,12 @@ func TestRouteAccessMatchesGuestLists(t *testing.T) {
 			want = "user|admin"
 		}
 		if want == "" || !strings.Contains(want, r.Access) {
-			t.Errorf("%s: Zugriffsstufe %q passt nicht zur Einordnung %q", r.Pattern, r.Access, want)
+			t.Errorf("%s: access %q does not match class %q", r.Pattern, r.Access, want)
 		}
 	}
 }
 
-// guestFixture legt Server, Test (mit Rohausgabe) und Trace an.
+// guestFixture holds a server, a test with raw output and a trace.
 type guestFixture struct {
 	srv                     *httptest.Server
 	st                      *store.Store
@@ -108,7 +106,7 @@ type guestFixture struct {
 	serverID, testID, trace int64
 }
 
-// rawMarker steht in der Rohausgabe und darf bei Gästen nie auftauchen.
+// rawMarker is in the raw output and must never reach guests.
 const rawMarker = "rohausgabe-nur-fuer-angemeldete"
 
 func newGuestFixture(t *testing.T, publicRead bool) guestFixture {
@@ -119,7 +117,7 @@ func newGuestFixture(t *testing.T, publicRead bool) guestFixture {
 
 	var sv model.Server
 	if code := call(t, srv, "POST", "/api/servers", f.admin, `{"name":"Gast-Server","host":"iperf.example.org"}`, &sv); code != http.StatusCreated {
-		t.Fatalf("Server anlegen: %d", code)
+		t.Fatalf("create server: %d", code)
 	}
 	f.serverID = sv.ID
 
@@ -143,7 +141,7 @@ func newGuestFixture(t *testing.T, publicRead bool) guestFixture {
 	return f
 }
 
-// path setzt die Pfadparameter einer Route ein.
+// path fills in a route's path parameters.
 func (f guestFixture) path(pattern string) string {
 	return strings.NewReplacer(
 		"{server_id}", itoa(f.serverID), "{test_id}", itoa(f.testID), "{trace_id}", itoa(f.trace),
@@ -151,8 +149,7 @@ func (f guestFixture) path(pattern string) string {
 	).Replace(pattern)
 }
 
-// guestGet ruft path ohne Anmeldung auf (token optional) und liefert Status
-// und Body. Bei SSE-Strömen wird nur der Status gelesen.
+// guestGet GETs path (token optional) and returns status and body; SSE streams return the status only.
 func guestGet(t *testing.T, srv *httptest.Server, path, token string) (int, string) {
 	t.Helper()
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -173,7 +170,7 @@ func guestGet(t *testing.T, srv *httptest.Server, path, token string) (int, stri
 	return resp.StatusCode, string(body)
 }
 
-// TestGuestRoutesClassified: Jede GET-Route ist für die Gastansicht eingeordnet.
+// TestGuestRoutesClassified: every GET route is classified for the guest view.
 func TestGuestRoutesClassified(t *testing.T) {
 	for _, r := range apiRoutes(t) {
 		if r.method != "GET" {
@@ -186,13 +183,12 @@ func TestGuestRoutesClassified(t *testing.T) {
 			}
 		}
 		if n != 1 {
-			t.Errorf("GET %s ist %d-mal eingeordnet (alwaysPublic, guestReadable oder userOnlyGet)", r.pattern, n)
+			t.Errorf("GET %s classified %d times (alwaysPublic, guestReadable or userOnlyGet)", r.pattern, n)
 		}
 	}
 }
 
-// TestGuestReadOnly: Mit public_read lesen Gäste Dashboard, Tests, Traces und
-// Server, ohne Geheimnisse zu sehen; alles Ändernde verlangt eine Anmeldung.
+// TestGuestReadOnly: with public_read guests read data without secrets; every mutation needs sign-in.
 func TestGuestReadOnly(t *testing.T) {
 	f := newGuestFixture(t, true)
 
@@ -203,33 +199,33 @@ func TestGuestReadOnly(t *testing.T) {
 		}
 		code, body := guestGet(t, f.srv, f.path(r.pattern), "")
 		if code != http.StatusOK {
-			t.Errorf("Gast GET %s: Status %d, %s", r.pattern, code, body)
+			t.Errorf("guest GET %s: status %d, %s", r.pattern, code, body)
 		}
 		bodies.WriteString(body)
 	}
-	// Die Daten kommen wirklich an.
+	// The data really arrives.
 	all := bodies.String()
 	for _, want := range []string{"Gast-Server", "iperf.example.org", "512.5", "192.0.2.1", `"available"`} {
 		if !strings.Contains(all, want) {
-			t.Errorf("Gastantworten enthalten %q nicht", want)
+			t.Errorf("guest responses lack %q", want)
 		}
 	}
-	// Keine Rohausgabe, keine lokalen Pfade, keine Benutzer- oder Sitzungsdaten.
+	// No raw output, local paths, user or session data.
 	for _, secret := range []string{rawMarker, "kein-iperf3", `"path"`, "install_command", auth.DefaultAdminEmail, "access_token", "csrf", "hashed"} {
 		if strings.Contains(all, secret) {
-			t.Errorf("Gastantworten enthalten %q", secret)
+			t.Errorf("guest responses contain %q", secret)
 		}
 	}
 
-	// Angemeldete Benutzer sehen weiter alles.
+	// Signed-in users still see everything.
 	if _, body := guestGet(t, f.srv, "/api/tests/"+itoa(f.testID), f.admin); !strings.Contains(body, rawMarker) {
-		t.Errorf("Admin: Rohausgabe fehlt: %s", body)
+		t.Errorf("admin: raw output missing: %s", body)
 	}
 	if _, body := guestGet(t, f.srv, "/api/status", f.admin); !strings.Contains(body, "kein-iperf3") {
-		t.Errorf("Admin: iperf3-Pfad fehlt: %s", body)
+		t.Errorf("admin: iperf3 path missing: %s", body)
 	}
 
-	// Nur angemeldet: Benutzer, Datenbank-Statistik, eigenes Konto.
+	// Sign-in only: users, database stats, own account.
 	for p := range userOnlyGet {
 		if strings.Contains(p, "live-trace") {
 			continue
@@ -237,8 +233,7 @@ func TestGuestReadOnly(t *testing.T) {
 		expectStatus(t, f.srv, "GET", f.path(p), "", "", http.StatusUnauthorized)
 	}
 
-	// Jede ändernde Route weist Gäste ab – ohne Token, mit ungültigem Token
-	// und mit ungültigem Sitzungs-Cookie.
+	// Every mutating route rejects guests: no token, invalid token, invalid cookie.
 	for _, r := range apiRoutes(t) {
 		if r.method == "GET" || publicWrite[r.method+" "+r.pattern] {
 			continue
@@ -247,26 +242,25 @@ func TestGuestReadOnly(t *testing.T) {
 		expectStatus(t, f.srv, r.method, p, "", `{}`, http.StatusUnauthorized)
 		expectStatus(t, f.srv, r.method, p, "kaputt", `{}`, http.StatusUnauthorized)
 		if code, _ := cookieRequest(t, f.srv, r.method, p, "kaputt"); code != http.StatusUnauthorized {
-			t.Errorf("%s %s mit ungültigem Cookie: Status %d", r.method, p, code)
+			t.Errorf("%s %s with invalid cookie: status %d", r.method, p, code)
 		}
 	}
 
-	// Nichts wurde verändert.
+	// Nothing changed.
 	var servers []model.Server
 	var tests []model.Test
 	call(t, f.srv, "GET", "/api/servers", f.admin, "", &servers)
 	call(t, f.srv, "GET", "/api/tests", f.admin, "", &tests)
 	if len(servers) != 1 || len(tests) != 1 {
-		t.Errorf("nach Gastzugriffen: %d Server, %d Tests", len(servers), len(tests))
+		t.Errorf("after guest access: %d servers, %d tests", len(servers), len(tests))
 	}
 	var traces []model.Trace
 	if call(t, f.srv, "GET", "/api/traces", f.admin, "", &traces); len(traces) != 1 {
-		t.Errorf("nach Gastzugriffen: %d Traces", len(traces))
+		t.Errorf("after guest access: %d traces", len(traces))
 	}
 }
 
-// TestGuestInvalidSession: Eine ungültige oder abgelaufene Sitzung gilt beim
-// Lesen als Gast; Schreiben bleibt gesperrt, CSRF gilt weiter.
+// TestGuestInvalidSession: invalid or expired sessions read as guests; writes stay blocked, CSRF still applies.
 func TestGuestInvalidSession(t *testing.T) {
 	f := newGuestFixture(t, true)
 	now := time.Now()
@@ -274,37 +268,37 @@ func TestGuestInvalidSession(t *testing.T) {
 
 	expectStatus(t, f.srv, "GET", "/api/servers", "kaputt", "", http.StatusOK)
 	if code, _ := cookieRequest(t, f.srv, "GET", "/api/servers", expired); code != http.StatusOK {
-		t.Errorf("abgelaufenes Cookie beim Lesen: Status %d", code)
+		t.Errorf("expired cookie on read: status %d", code)
 	}
 	if code, _ := cookieRequest(t, f.srv, "POST", "/api/servers", expired); code != http.StatusUnauthorized {
-		t.Errorf("abgelaufenes Cookie beim Schreiben: Status %d", code)
+		t.Errorf("expired cookie on write: status %d", code)
 	}
-	// Gast-Rohausgabe auch mit ungültigem Token nicht sichtbar.
+	// No raw output with an invalid token either.
 	if _, body := guestGet(t, f.srv, "/api/tests/"+itoa(f.testID), "kaputt"); strings.Contains(body, rawMarker) {
-		t.Error("ungültiges Token erhält die Rohausgabe")
+		t.Error("invalid token gets the raw output")
 	}
-	// /auth/me meldet Gästen weiter 401 (daran erkennt die Oberfläche den Gast).
+	// /auth/me still answers 401 to guests (the UI detects guests by it).
 	expectStatus(t, f.srv, "GET", "/api/auth/me", "kaputt", "", http.StatusUnauthorized)
 
-	// Cookie-Sitzung ohne CSRF-Token: Schreiben weiter 403, Lesen als Benutzer.
+	// Cookie session without CSRF token: writes 403, reads as the user.
 	b := newBrowser(t, f.srv)
 	b.login("admin", "admin123")
 	if code, _ := b.do("POST", "/api/servers", `{"name":"B","host":"b"}`, nil, nil); code != http.StatusForbidden {
-		t.Errorf("ohne CSRF-Token: Status %d", code)
+		t.Errorf("without CSRF token: status %d", code)
 	}
 	var detail map[string]any
 	if code, _ := b.do("GET", "/api/tests/"+itoa(f.testID), "", nil, &detail); code != http.StatusOK || detail["raw_output"] == nil {
-		t.Errorf("Cookie-Sitzung: %d, raw_output %v", code, detail["raw_output"])
+		t.Errorf("cookie session: %d, raw_output %v", code, detail["raw_output"])
 	}
 
-	// /auth/status meldet die Gastansicht.
+	// /auth/status reports the guest view.
 	var status map[string]any
 	if call(t, f.srv, "GET", "/api/auth/status", "", "", &status); status["public_read"] != true {
 		t.Errorf("/auth/status: %v", status)
 	}
 }
 
-// TestGuestPublicReadOff: Ohne public_read bleibt jede lesende Route gesperrt.
+// TestGuestPublicReadOff: without public_read every read route stays closed.
 func TestGuestPublicReadOff(t *testing.T) {
 	f := newGuestFixture(t, false)
 	for _, r := range apiRoutes(t) {
@@ -312,26 +306,25 @@ func TestGuestPublicReadOff(t *testing.T) {
 			continue
 		}
 		if code, body := guestGet(t, f.srv, f.path(r.pattern), ""); code != http.StatusUnauthorized {
-			t.Errorf("ohne public_read GET %s: Status %d, %s", r.pattern, code, body)
+			t.Errorf("without public_read GET %s: status %d, %s", r.pattern, code, body)
 		}
 		if code, _ := guestGet(t, f.srv, f.path(r.pattern), "kaputt"); code != http.StatusUnauthorized {
-			t.Errorf("ohne public_read GET %s mit ungültigem Token: Status %d", r.pattern, code)
+			t.Errorf("without public_read GET %s with invalid token: status %d", r.pattern, code)
 		}
 	}
 }
 
-// TestGuestLiveTrace: Die Live-Traceroute startet eine Aktion und verlangt
-// auch mit public_read eine Anmeldung; es wird nichts gespeichert.
+// TestGuestLiveTrace: the live trace is an action, so it needs sign-in even with public_read; nothing is saved.
 func TestGuestLiveTrace(t *testing.T) {
 	for _, publicRead := range []bool{true, false} {
 		f := newGuestFixture(t, publicRead)
 		events := readSSE(t, f.srv, "127.0.0.1", "")
 		if eventTypes(events) != "error" || events[0].Message == "" {
-			t.Errorf("public_read=%v: Gast-Live-Trace: %+v", publicRead, events)
+			t.Errorf("public_read=%v: guest live trace: %+v", publicRead, events)
 		}
 		var traces []model.Trace
 		if call(t, f.srv, "GET", "/api/traces", f.admin, "", &traces); len(traces) != 1 {
-			t.Errorf("public_read=%v: %d Traces nach Gast-Live-Trace", publicRead, len(traces))
+			t.Errorf("public_read=%v: %d traces after guest live trace", publicRead, len(traces))
 		}
 	}
 }

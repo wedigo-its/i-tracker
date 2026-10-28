@@ -31,8 +31,7 @@ func TestFromRequest(t *testing.T) {
 	}
 }
 
-// Error() is English; ErrorIn renders the same error in either language,
-// nested messages included, and leaves foreign text as it is.
+// Error() is English; ErrorIn renders either language, nested included, foreign text as is.
 func TestErrorIn(t *testing.T) {
 	notInstalled := E("err.iperf.not_installed")
 	cases := []struct {
@@ -74,8 +73,7 @@ func TestErrorIn(t *testing.T) {
 	}
 }
 
-// A stored message renders in both languages; old German rows are
-// recognized, a stale or unknown message falls back to the stored text.
+// Stored messages render in both languages; old German rows are recognized, stale/unknown fall back.
 func TestLocalize(t *testing.T) {
 	stored := Wrap(Foreign("lookup x.invalid: no such host"), "err.trace.resolve")
 	enc, english := MsgOf(stored).Encode(), stored.Error()
@@ -85,8 +83,7 @@ func TestLocalize(t *testing.T) {
 	if got := Localize(EN, enc, english); got != english {
 		t.Errorf("en: %q", got)
 	}
-	// Stale message: the English column was changed by a version that does
-	// not know error_text.
+	// Stale: English column changed by a version unaware of error_text.
 	if got := Localize(DE, enc, "something else"); got != "something else" {
 		t.Errorf("stale: %q", got)
 	}

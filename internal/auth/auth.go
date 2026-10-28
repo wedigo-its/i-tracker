@@ -1,7 +1,6 @@
-// Package auth kapselt Passwort-Hashing (Argon2id, ältere bcrypt-Hashes
-// werden weiter erkannt), Sitzungs-Tokens (JWT, HS256) und die daraus
-// abgeleiteten CSRF-Tokens, die Sperrliste abgemeldeter Sitzungen und die
-// Bremse für Fehlanmeldungen.
+// Package auth handles password hashing (Argon2id, legacy bcrypt still
+// accepted), session tokens (JWT, HS256) with derived CSRF tokens, the
+// revocation list of signed-out sessions and the failed-login limiter.
 package auth
 
 import (
@@ -24,33 +23,31 @@ import (
 	"i-tracker/internal/model"
 )
 
-// DefaultSessionTTL ist die gleitende Gültigkeit einer Sitzung ohne
-// Aktivität, wenn auth.session_ttl nicht gesetzt ist.
+// DefaultSessionTTL is the sliding idle session lifetime if auth.session_ttl is unset.
 const DefaultSessionTTL = 12 * time.Hour
 
-// Benutzername und E-Mail des ersten Admins, der angelegt wird, solange kein
-// Benutzer existiert. Das Passwort wird zufällig erzeugt (GeneratePassword).
+// First admin, created while no user exists; the password is random (GeneratePassword).
 const (
 	DefaultAdminUsername = "admin"
 	DefaultAdminEmail    = "admin@iperf-tracker.local"
 )
 
-// LegacyDefaultPassword ist das feste Standardpasswort früherer Versionen.
-// Ein Admin, der es noch nutzt, muss es bei der nächsten Anmeldung ändern.
+// LegacyDefaultPassword is the fixed default of earlier versions; an admin
+// still using it must change it at the next sign-in.
 const LegacyDefaultPassword = "admin123"
 
-// MaxPasswordBytes begrenzt die Passwortlänge (Schutz vor sehr langen Eingaben).
+// MaxPasswordBytes caps password length (guards against huge inputs).
 const MaxPasswordBytes = 256
 
-// MinPasswordLength ist die Mindestlänge neuer Passwörter in Zeichen.
-// Bestehende kürzere Passwörter bleiben gültig, geprüft wird nur beim Setzen.
+// MinPasswordLength is the minimum length of new passwords in characters;
+// only checked when setting, shorter existing passwords stay valid.
 const MinPasswordLength = 8
 
-// ErrInvalidToken wird für fehlerhafte, abgelaufene oder fremd signierte Tokens geliefert.
+// ErrInvalidToken is returned for malformed, expired or foreign-signed tokens.
 var ErrInvalidToken = errors.New("invalid token")
 
-// Argon2id-Parameter nach RFC 9106, Abschnitt 4 (zweite Empfehlung):
-// 64 MiB Speicher, 3 Durchläufe, 4 Threads.
+// Argon2id parameters per RFC 9106, section 4 (second recommendation):
+// 64 MiB, 3 passes, 4 threads.
 const (
 	argonTime    = 3
 	argonMemory  = 64 * 1024
@@ -59,7 +56,7 @@ const (
 	argonSaltLen = 16
 )
 
-// HashPassword erzeugt einen Argon2id-Hash im PHC-Format
+// HashPassword returns an Argon2id hash in PHC format
 // ($argon2id$v=19$m=65536,t=3,p=4$<salt>$<hash>).
 func HashPassword(password string) (string, error) {
 	salt := make([]byte, argonSaltLen)
@@ -72,8 +69,7 @@ func HashPassword(password string) (string, error) {
 		argon2.Version, argonMemory, argonTime, argonThreads, b64.EncodeToString(salt), b64.EncodeToString(key)), nil
 }
 
-// CheckPassword prüft password gegen einen Argon2id- oder (ältere Konten)
-// bcrypt-Hash.
+// CheckPassword checks password against an Argon2id or (legacy) bcrypt hash.
 func CheckPassword(hash, password string) bool {
 	if strings.HasPrefix(hash, "$argon2id$") {
 		p, err := parseArgon2id(hash)
@@ -91,10 +87,8 @@ var (
 	dummyVal  string
 )
 
-// DummyHash liefert einen Argon2id-Hash mit den aktuellen Parametern, gegen
-// den bei unbekanntem Benutzer geprüft wird. So dauert eine Fehlanmeldung
-// gleich lang wie bei einem vorhandenen Konto (kein Benutzer-Orakel über die
-// Antwortzeit). Er wird erst beim ersten Bedarf berechnet.
+// DummyHash returns a lazily computed Argon2id hash to check unknown users
+// against, so failed sign-ins take equally long (no user oracle via timing).
 func DummyHash() string {
 	dummyOnce.Do(func() {
 		h, err := HashPassword("i-tracker-dummy")
@@ -106,8 +100,8 @@ func DummyHash() string {
 	return dummyVal
 }
 
-// NeedsRehash meldet, ob hash nicht mit den aktuellen Argon2id-Parametern
-// erzeugt wurde (z. B. bcrypt) und nach erfolgreicher Anmeldung ersetzt werden sollte.
+// NeedsRehash reports whether hash lacks the current Argon2id parameters
+// (e.g. bcrypt) and should be replaced after a successful sign-in.
 func NeedsRehash(hash string) bool {
 	p, err := parseArgon2id(hash)
 	if err != nil {
@@ -149,10 +143,10 @@ func parseArgon2id(hash string) (argonParams, error) {
 	return p, nil
 }
 
-// passwordAlphabet enthält keine leicht verwechselbaren Zeichen (0/O, 1/l/I).
+// passwordAlphabet omits easily confused characters (0/O, 1/l/I).
 const passwordAlphabet = "abcdefghijkmnpqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789"
 
-// GeneratePassword erzeugt ein zufälliges Passwort mit 18 Zeichen (rund 104 Bit).
+// GeneratePassword returns a random 18-character password (about 104 bits).
 func GeneratePassword() string {
 	const n = 18
 	out := make([]byte, n)
@@ -161,7 +155,7 @@ func GeneratePassword() string {
 		if _, err := rand.Read(buf); err != nil {
 			panic("random number generator not available: " + err.Error())
 		}
-		// Verwerfen statt Modulo, damit alle Zeichen gleich wahrscheinlich sind.
+		// Rejection sampling instead of plain modulo: keeps characters uniform.
 		if int(buf[0]) >= 256-256%len(passwordAlphabet) {
 			continue
 		}
@@ -171,8 +165,8 @@ func GeneratePassword() string {
 	return string(out)
 }
 
-// NewAdmin baut einen Admin mit dem angegebenen Passwort (noch nicht
-// gespeichert). mustChange erzwingt den Passwortwechsel bei der ersten Anmeldung.
+// NewAdmin builds an unsaved admin with password; mustChange forces a
+// password change at the first sign-in.
 func NewAdmin(username, email, password string, mustChange bool) (*model.User, error) {
 	hash, err := HashPassword(password)
 	if err != nil {
@@ -188,37 +182,36 @@ func NewAdmin(username, email, password string, mustChange bool) (*model.User, e
 	}, nil
 }
 
-// Claims ist der Inhalt eines Sitzungs-Tokens.
+// Claims is the content of a session token.
 type Claims struct {
-	// Username ist der angemeldete Benutzer (sub).
+	// Username is the signed-in user (sub).
 	Username string
-	// Version ist die Token-Version des Benutzers beim Ausstellen (ver). Ein
-	// Passwortwechsel oder „überall abmelden“ erhöht sie in der Datenbank und
-	// macht damit alle älteren Tokens des Benutzers ungültig.
+	// Version is the user's token version at issue (ver); a password change or
+	// "sign out everywhere" bumps it in the DB, invalidating older tokens.
 	Version int64
-	// SessionID kennzeichnet die Sitzung (jti). Sie bleibt beim Verlängern
-	// erhalten; an ihr hängen die Sperrliste und das CSRF-Token.
+	// SessionID identifies the session (jti); kept on renewal, keys the
+	// revocation list and the CSRF token.
 	SessionID string
 	IssuedAt  time.Time
 	ExpiresAt time.Time
 }
 
-// jwtClaims ist die JWT-Darstellung von Claims.
+// jwtClaims is the JWT form of Claims.
 type jwtClaims struct {
 	jwt.RegisteredClaims
 	Version int64 `json:"ver"`
 }
 
-// Tokens erstellt und prüft Sitzungs-Tokens. Payload:
-// {"sub": <username>, "ver": <token_version>, "jti": <sitzung>, "iat": <unix>, "exp": <unix>}.
+// Tokens issues and verifies session tokens. Payload:
+// {"sub": <username>, "ver": <token_version>, "jti": <session>, "iat": <unix>, "exp": <unix>}.
 type Tokens struct {
 	secret []byte
 	ttl    time.Duration
 	now    func() time.Time
 }
 
-// NewTokens erstellt einen Token-Dienst mit dem angegebenen Signaturschlüssel
-// und der gleitenden Sitzungsdauer ttl (<= 0: DefaultSessionTTL).
+// NewTokens creates a token service with the signing key and sliding session
+// lifetime ttl (<= 0: DefaultSessionTTL).
 func NewTokens(secret string, ttl time.Duration) *Tokens {
 	if ttl <= 0 {
 		ttl = DefaultSessionTTL
@@ -226,10 +219,10 @@ func NewTokens(secret string, ttl time.Duration) *Tokens {
 	return &Tokens{secret: []byte(secret), ttl: ttl, now: time.Now}
 }
 
-// TTL liefert die Sitzungsdauer.
+// TTL returns the session lifetime.
 func (t *Tokens) TTL() time.Duration { return t.ttl }
 
-// Create stellt ein Token für eine neue Sitzung von username aus.
+// Create issues a token for a new session of username.
 func (t *Tokens) Create(username string, version int64) (string, Claims, error) {
 	b := make([]byte, 16)
 	if _, err := rand.Read(b); err != nil {
@@ -238,8 +231,7 @@ func (t *Tokens) Create(username string, version int64) (string, Claims, error) 
 	return t.Renew(Claims{Username: username, Version: version, SessionID: hex.EncodeToString(b)})
 }
 
-// Renew stellt für die Sitzung c ein Token mit voller Laufzeit aus
-// (gleiche SessionID, Version aus c).
+// Renew issues a full-lifetime token for session c (same SessionID and Version).
 func (t *Tokens) Renew(c Claims) (string, Claims, error) {
 	now := t.now().Truncate(time.Second)
 	c.IssuedAt, c.ExpiresAt = now, now.Add(t.ttl)
@@ -255,14 +247,14 @@ func (t *Tokens) Renew(c Claims) (string, Claims, error) {
 	return token, c, err
 }
 
-// NeedsRenewal meldet, ob mehr als die Hälfte der Laufzeit von c verstrichen
-// ist. Dann verlängert der Server die Sitzung (gleitende Gültigkeit).
+// NeedsRenewal reports whether over half of c's lifetime has passed, so the
+// server renews the session (sliding expiry).
 func (t *Tokens) NeedsRenewal(c Claims) bool {
 	return t.now().After(c.IssuedAt.Add(t.ttl / 2))
 }
 
-// Parse prüft Signatur und Ablauf eines Tokens und liefert seinen Inhalt.
-// Ob die Sitzung gesperrt oder die Version veraltet ist, prüft der Aufrufer.
+// Parse verifies a token's signature and expiry and returns its claims; the
+// caller checks revocation and version.
 func (t *Tokens) Parse(token string) (Claims, error) {
 	var jc jwtClaims
 	_, err := jwt.ParseWithClaims(token, &jc,
@@ -272,7 +264,7 @@ func (t *Tokens) Parse(token string) (Claims, error) {
 		jwt.WithIssuedAt(),
 		jwt.WithTimeFunc(t.now),
 	)
-	// Tokens ohne Sitzungskennung (frühere Versionen) gelten nicht mehr.
+	// Tokens without a session ID (earlier versions) are no longer valid.
 	if err != nil || jc.Subject == "" || jc.ID == "" || jc.IssuedAt == nil {
 		return Claims{}, ErrInvalidToken
 	}
@@ -285,9 +277,8 @@ func (t *Tokens) Parse(token string) (Claims, error) {
 	}, nil
 }
 
-// CSRF leitet das CSRF-Token einer Sitzung ab. Es ist an die Sitzungskennung
-// gebunden, bleibt also beim Verlängern gleich, und muss bei ändernden
-// Anfragen im Header X-CSRF-Token stehen.
+// CSRF derives a session's CSRF token; bound to the session ID (stable across
+// renewals), required in the X-CSRF-Token header on mutating requests.
 func (t *Tokens) CSRF(sessionID string) string {
 	m := hmac.New(sha256.New, t.secret)
 	m.Write([]byte("csrf\x00"))
@@ -295,7 +286,7 @@ func (t *Tokens) CSRF(sessionID string) string {
 	return base64.RawURLEncoding.EncodeToString(m.Sum(nil))
 }
 
-// CheckCSRF vergleicht ein übermitteltes CSRF-Token in konstanter Zeit.
+// CheckCSRF compares a submitted CSRF token in constant time.
 func (t *Tokens) CheckCSRF(sessionID, got string) bool {
 	return got != "" && subtle.ConstantTimeCompare([]byte(t.CSRF(sessionID)), []byte(got)) == 1
 }

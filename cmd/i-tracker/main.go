@@ -82,7 +82,7 @@ func main() {
 	}
 }
 
-// newLogger richtet slog nach log.level und log.format ein.
+// newLogger sets up slog from log.level and log.format.
 func newLogger(out io.Writer, cfg config.LogConfig) *slog.Logger {
 	opts := &slog.HandlerOptions{Level: cfg.SlogLevel()}
 	if cfg.Format == "json" {
@@ -91,10 +91,10 @@ func newLogger(out io.Writer, cfg config.LogConfig) *slog.Logger {
 	return slog.New(slog.NewTextHandler(out, opts))
 }
 
-// run lädt die Konfiguration, startet alle Dienste und blockiert, bis stop
-// geschlossen wird oder der HTTP-Server scheitert.
+// run loads the config, starts all services and blocks until stop is closed
+// or the HTTP server fails.
 func run(cfgPath string, logOut io.Writer, stop <-chan struct{}) error {
-	// --- Konfiguration laden oder beim ersten Start anlegen ---
+	// --- Config: load, or create on first start ---
 	var (
 		cfg     *config.Config
 		created bool
@@ -121,7 +121,7 @@ func run(cfgPath string, logOut io.Writer, stop <-chan struct{}) error {
 		slog.Warn("auth.secret_key not set: temporary key generated, sign-ins become invalid on restart")
 	}
 
-	// --- Datenbank ---
+	// --- Database ---
 	conn, err := db.Open(cfg.Storage.Path)
 	if err != nil {
 		return err
@@ -160,9 +160,8 @@ func run(cfgPath string, logOut io.Writer, stop <-chan struct{}) error {
 	defer runner.Stop()
 	runner.Prepare(cfg.Iperf.Path, cfg.Iperf.AutoInstall)
 
-	// --- GeoIP für Trace-Standorte ---
-	// Neben dem konfigurierten Pfad gelten der frühere Standardpfad und die
-	// Ablage von geoipupdate unter Linux.
+	// --- GeoIP for trace locations ---
+	// Fallbacks: the former default path and geoipupdate's Linux location.
 	geo := trace.NewGeoIP()
 	defer geo.Close()
 	switch p, err := geo.Load(cfg.GeoIP.Path, filepath.Join(cfg.Dir, "geoip", "GeoLite2-City.mmdb"), "/var/lib/GeoIP/GeoLite2-City.mmdb"); {
@@ -199,14 +198,14 @@ func run(cfgPath string, logOut io.Writer, stop <-chan struct{}) error {
 		slog.Info("Scheduler disabled by configuration")
 	}
 
-	// --- HTTP-Server ---
+	// --- HTTP server ---
 	if cfg.Map.TileURL != "" {
 		slog.Info("Peering map uses a tile server", "tile_url", cfg.Map.TileURL)
 	}
 	if cfg.Auth.PublicRead {
 		slog.Info("Read-only view without sign-in enabled (auth.public_read)")
 	}
-	// Gültigkeit ist bereits in config.validate geprüft.
+	// Already validated in config.validate.
 	sessionTTL, _ := cfg.Auth.SessionDuration()
 	srv := &http.Server{
 		Addr: cfg.Web.Listen,
@@ -258,9 +257,9 @@ func run(cfgPath string, logOut io.Writer, stop <-chan struct{}) error {
 	return srv.Shutdown(ctx)
 }
 
-// ---------- Dienstbetrieb ----------
+// ---------- Service mode ----------
 
-// program bindet run an den Dienstmanager (kardianos/service).
+// program binds run to the service manager (kardianos/service).
 type program struct {
 	cfgPath string
 	logOut  io.Writer
@@ -291,7 +290,7 @@ func (p *program) Stop(service.Service) error {
 	return nil
 }
 
-// runService läuft unter dem Dienstmanager (Argument "service-run").
+// runService runs under the service manager (argument "service-run").
 func runService(args []string) error {
 	fs := flag.NewFlagSet("service-run", flag.ContinueOnError)
 	cfgPath := fs.String("config", "", "path to the configuration file")
@@ -302,8 +301,8 @@ func runService(args []string) error {
 	if err != nil {
 		return err
 	}
-	// Windows-Dienste starten in System32 und haben keine Konsole: ins
-	// Verzeichnis der Konfiguration wechseln und dort ins Logfile schreiben.
+	// Windows services start in System32 without a console: switch to the
+	// config directory and log to a file there.
 	var logOut io.Writer = os.Stderr
 	if runtime.GOOS == "windows" && !service.Interactive() {
 		f, err := os.OpenFile(filepath.Join(filepath.Dir(path), "i-tracker.log"), os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o640)
@@ -320,8 +319,8 @@ func runService(args []string) error {
 	return s.Run()
 }
 
-// serviceConfigPath liefert den absoluten Konfigurationspfad für den Dienst;
-// ohne Angabe config.yaml neben der Binary.
+// serviceConfigPath returns the absolute config path for the service
+// (default: config.yaml next to the binary).
 func serviceConfigPath(p string) (string, error) {
 	if p == "" {
 		exe, err := os.Executable()
@@ -333,7 +332,7 @@ func serviceConfigPath(p string) (string, error) {
 	return filepath.Abs(p)
 }
 
-// defineFlags legt die Optionen des Hauptprogramms an (auch für die Produktdokumentation).
+// defineFlags defines the main flags (also used for the product docs).
 func defineFlags(fs *flag.FlagSet) (cfgPath *string, showVersion *bool) {
 	cfgPath = fs.String("config", "config.yaml", "path to the configuration file")
 	showVersion = fs.Bool("version", false, "print the version and exit")
@@ -341,10 +340,10 @@ func defineFlags(fs *flag.FlagSet) (cfgPath *string, showVersion *bool) {
 	return
 }
 
-// serviceActions sind die Unterbefehle von "i-tracker service" (auch für die Produktdokumentation).
+// serviceActions are the subcommands of "i-tracker service" (also used for the product docs).
 var serviceActions = []string{"install", "uninstall", "start", "stop", "restart", "status"}
 
-// handleServiceCommand verarbeitet
+// handleServiceCommand handles
 //
 //	i-tracker service install|uninstall|start|stop|restart|status [-config path]
 func handleServiceCommand(args []string) {

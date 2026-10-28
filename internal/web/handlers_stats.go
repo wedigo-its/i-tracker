@@ -9,8 +9,7 @@ import (
 	"i-tracker/internal/store"
 )
 
-// handleDashboardStats liefert die Übersicht. „Heute“ bezieht sich auf die
-// lokale Zeitzone des Servers.
+// handleDashboardStats returns the overview; "today" uses the server's local time zone.
 func (s *Server) handleDashboardStats(w http.ResponseWriter, r *http.Request, _ *model.User) {
 	now := time.Now()
 	todayStart := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location())

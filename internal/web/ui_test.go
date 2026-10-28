@@ -22,7 +22,7 @@ func TestServesUI(t *testing.T) {
 		body, _ := io.ReadAll(resp.Body)
 		resp.Body.Close()
 		if resp.StatusCode != http.StatusOK || !strings.Contains(string(body), want) {
-			t.Errorf("%s: Status %d, enthält %q nicht", path, resp.StatusCode, want)
+			t.Errorf("%s: status %d, missing %q", path, resp.StatusCode, want)
 		}
 		if cc := resp.Header.Get("Cache-Control"); cc != "no-cache" {
 			t.Errorf("%s: Cache-Control = %q", path, cc)
@@ -31,9 +31,7 @@ func TestServesUI(t *testing.T) {
 	expectStatus(t, srv, "GET", "/static/gibt-es-nicht.js", "", "", http.StatusNotFound)
 }
 
-// TestAssetsEmbedded prüft, dass alle Bibliotheken, Styles und die Weltkarte
-// eingebettet ausgeliefert werden und die Oberfläche keine fremden Server
-// anspricht (CSP default-src 'self').
+// TestAssetsEmbedded: libraries, styles and the world map are embedded and the UI contacts no foreign servers (CSP default-src 'self').
 func TestAssetsEmbedded(t *testing.T) {
 	srv := newTestServer(t)
 	for path, want := range map[string]string{
@@ -57,13 +55,12 @@ func TestAssetsEmbedded(t *testing.T) {
 		body, _ := io.ReadAll(resp.Body)
 		resp.Body.Close()
 		if resp.StatusCode != http.StatusOK || !strings.Contains(string(body), want) {
-			t.Errorf("%s: Status %d, enthält %q nicht", path, resp.StatusCode, want)
+			t.Errorf("%s: status %d, missing %q", path, resp.StatusCode, want)
 		}
 	}
 
-	// index.html und die eigenen Skripte laden nichts von außen (Links wie die
-	// Kartenquelle in der Attribution sind erlaubt) und enthalten
-	// weder Inline-Skripte noch Inline-Handler oder -Styles.
+	// Own files load nothing external (attribution links are fine) and have no
+	// inline scripts, handlers or styles.
 	external := regexp.MustCompile(`(?i)src\s*=\s*["']https?://|<link[^>]+href\s*=\s*["']https?://|url\(\s*["']?https?://|fetch\(\s*["']https?://|EventSource\(\s*["']https?://|tile\.openstreetmap|cdn\.jsdelivr|unpkg\.com`)
 	inline := regexp.MustCompile(`(?i)\son[a-z]+\s*=\s*"|\sstyle\s*=\s*"|<script>`)
 	for _, name := range []string{"static/index.html", "static/app.js", "static/i18n.js", "static/theme-init.js", "static/app.css"} {
@@ -72,25 +69,25 @@ func TestAssetsEmbedded(t *testing.T) {
 			t.Fatal(err)
 		}
 		if m := external.Find(data); m != nil {
-			t.Errorf("%s lädt eine externe Ressource: %s", name, m)
+			t.Errorf("%s loads an external resource: %s", name, m)
 		}
 		if strings.HasSuffix(name, ".css") {
 			continue
 		}
 		for _, m := range inline.FindAll(data, -1) {
-			t.Errorf("%s enthält Inline-Code: %s", name, m)
+			t.Errorf("%s contains inline code: %s", name, m)
 		}
 	}
 }
 
-// TestNoHexOutsideTokens: Hex-Farben stehen nur in wedigo-tokens.css, im
-// Produktfarben-Block von app.css und in der Serienpalette (SERIES_COLORS).
+// TestNoHexOutsideTokens: hex colors only in wedigo-tokens.css, the app.css
+// product color block and SERIES_COLORS.
 func TestNoHexOutsideTokens(t *testing.T) {
 	hex := regexp.MustCompile(`#[0-9a-fA-F]{6}\b|#[0-9a-fA-F]{3}\b`)
 	css, _ := fs.ReadFile(static, "static/app.css")
 	_, rest, _ := strings.Cut(string(css), "/* ---------- Abgeleitete Werte")
 	if m := hex.FindString(rest); m != "" {
-		t.Errorf("app.css: Hex-Farbe %s außerhalb des Produktfarben-Blocks", m)
+		t.Errorf("app.css: hex color %s outside the product color block", m)
 	}
 	js, _ := fs.ReadFile(static, "static/app.js")
 	for _, line := range strings.Split(string(js), "\n") {
@@ -98,14 +95,13 @@ func TestNoHexOutsideTokens(t *testing.T) {
 			continue
 		}
 		if m := hex.FindString(line); m != "" && !strings.Contains(line, "&#") {
-			t.Errorf("app.js: Hex-Farbe %s in %q", m, strings.TrimSpace(line))
+			t.Errorf("app.js: hex color %s in %q", m, strings.TrimSpace(line))
 		}
 	}
 }
 
-// TestI18nCatalogComplete: Jeder Textschlüssel aus index.html (data-i18n*)
-// und app.js (t('…'), auch t(x ? '…' : '…')) steht im Katalog von i18n.js,
-// jeweils mit deutscher und englischer Fassung.
+// TestI18nCatalogComplete: every key from index.html (data-i18n*) and app.js
+// (t('…'), t(x ? '…' : '…')) is in the i18n.js catalog in de and en.
 func TestI18nCatalogComplete(t *testing.T) {
 	read := func(name string) string {
 		data, err := fs.ReadFile(static, "static/"+name)
@@ -121,7 +117,7 @@ func TestI18nCatalogComplete(t *testing.T) {
 		keys[m[1]] = true
 	}
 	if len(keys) < 200 {
-		t.Fatalf("nur %d Katalogeinträge mit zwei Sprachen erkannt", len(keys))
+		t.Fatalf("only %d two-language catalog entries found", len(keys))
 	}
 
 	used := map[string]bool{}
@@ -137,18 +133,17 @@ func TestI18nCatalogComplete(t *testing.T) {
 	}
 	for _, k := range []string{"guest.badge", "guest.back", "guest.noTestHint", "guest.signInTitle"} {
 		if !used[k] {
-			t.Errorf("%s wird nicht verwendet", k)
+			t.Errorf("%s is unused", k)
 		}
 	}
 	for k := range used {
 		if !keys[k] {
-			t.Errorf("Textschlüssel %q fehlt im Katalog (de und en)", k)
+			t.Errorf("key %q missing from the catalog (de and en)", k)
 		}
 	}
 }
 
-// TestGuestUIMarkers: In der Gastansicht blendet body.read-only alle
-// ändernden Bedienelemente aus; sie tragen dafür data-user-only.
+// TestGuestUIMarkers: body.read-only hides all mutating controls in the guest view via data-user-only.
 func TestGuestUIMarkers(t *testing.T) {
 	html, _ := fs.ReadFile(static, "static/index.html")
 	for _, marker := range []string{
@@ -162,7 +157,7 @@ func TestGuestUIMarkers(t *testing.T) {
 		`id="guestBack"`,
 	} {
 		if !strings.Contains(string(html), marker) {
-			t.Errorf("index.html: %s fehlt", marker)
+			t.Errorf("index.html: %s missing", marker)
 		}
 	}
 	js, _ := fs.ReadFile(static, "static/app.js")
@@ -173,11 +168,11 @@ func TestGuestUIMarkers(t *testing.T) {
 		`function showGuest()`,
 	} {
 		if !strings.Contains(string(js), marker) {
-			t.Errorf("app.js: %s fehlt", marker)
+			t.Errorf("app.js: %s missing", marker)
 		}
 	}
 	css, _ := fs.ReadFile(static, "static/app.css")
 	if !strings.Contains(string(css), "body.read-only [data-user-only] { display: none !important; }") {
-		t.Error("app.css: Regel für data-user-only fehlt")
+		t.Error("app.css: data-user-only rule missing")
 	}
 }

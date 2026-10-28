@@ -1,4 +1,4 @@
-// Package store kapselt alle Datenbankzugriffe.
+// Package store wraps all database access.
 package store
 
 import (
@@ -11,13 +11,13 @@ import (
 )
 
 var (
-	// ErrNotFound wird geliefert, wenn ein angefragter Datensatz nicht existiert.
+	// ErrNotFound means the requested record does not exist.
 	ErrNotFound = errors.New("record not found")
-	// ErrDuplicate wird geliefert, wenn ein eindeutiger Wert bereits vergeben ist.
+	// ErrDuplicate means a unique value is already taken.
 	ErrDuplicate = errors.New("value already taken")
 )
 
-// mapUnique übersetzt eine UNIQUE-Verletzung in ErrDuplicate.
+// mapUnique maps a UNIQUE violation to ErrDuplicate.
 func mapUnique(err error) error {
 	var se *sqlite.Error
 	if errors.As(err, &se) && se.Code() == sqlite3.SQLITE_CONSTRAINT_UNIQUE {
@@ -26,7 +26,7 @@ func mapUnique(err error) error {
 	return err
 }
 
-// affectedOne liefert ErrNotFound, wenn die Anweisung keine Zeile betroffen hat.
+// affectedOne returns ErrNotFound when no row was affected.
 func affectedOne(res sql.Result, err error) error {
 	if err != nil {
 		return err
@@ -41,21 +41,19 @@ func affectedOne(res sql.Result, err error) error {
 	return nil
 }
 
-// Store bündelt die Datenbankzugriffe aller Entitäten.
+// Store holds the database access for all entities.
 type Store struct {
 	db *sql.DB
 }
 
-// New erstellt einen Store auf einer bereits geöffneten Datenbank.
+// New creates a Store on an open database.
 func New(conn *sql.DB) *Store { return &Store{db: conn} }
 
-// noCancel entkoppelt Datenbankzugriffe vom Abbruch des Aufrufers. Bricht ein
-// Context mitten in einer SQLite-Abfrage ab, kann der Treiber die Verbindung
-// verwaist zurücklassen: Sie hält die Datei offen und blockiert WAL-Checkpoints.
-// Die Abfragen sind lokal und kurz, ein Abbruch spart nichts.
+// noCancel detaches queries from caller cancellation: a cancel mid-query can orphan the
+// connection, keeping the file open and blocking WAL checkpoints; local queries are short anyway.
 func noCancel(ctx context.Context) context.Context { return context.WithoutCancel(ctx) }
 
-// rowScanner deckt *sql.Row und *sql.Rows ab.
+// rowScanner covers *sql.Row and *sql.Rows.
 type rowScanner interface {
 	Scan(dest ...any) error
 }

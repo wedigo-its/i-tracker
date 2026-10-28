@@ -16,13 +16,13 @@ func TestTraceRoutes(t *testing.T) {
 	expectStatus(t, srv, "POST", "/api/traces", tok, `{"destination":""}`, http.StatusUnprocessableEntity)
 	expectStatus(t, srv, "POST", "/api/traces", tok, `{"destination":"x","max_hops":65}`, http.StatusUnprocessableEntity)
 
-	// Direkter Trace: Ohne traceroute-Binary wird er als unvollständig gespeichert.
+	// Direct trace: without a traceroute binary it is saved as incomplete.
 	var direct model.Trace
 	if code := call(t, srv, "POST", "/api/traces", tok, `{"destination":"127.0.0.1"}`, &direct); code != http.StatusCreated {
 		t.Fatalf("POST /traces: %d", code)
 	}
 	if direct.ID == 0 || direct.Completed || direct.ErrorMessage == nil || direct.TestID != nil || direct.Hops == nil {
-		t.Errorf("direkter Trace: %+v", direct)
+		t.Errorf("direct trace: %+v", direct)
 	}
 
 	var got model.Trace
@@ -31,10 +31,10 @@ func TestTraceRoutes(t *testing.T) {
 	}
 	var list []model.Trace
 	if call(t, srv, "GET", "/api/traces?limit=5", tok, "", &list); len(list) != 1 {
-		t.Errorf("Liste: %d", len(list))
+		t.Errorf("list: %d", len(list))
 	}
 
-	// Trace zu einem Test: läuft im Hintergrund.
+	// Test trace: runs in the background.
 	var sv model.Server
 	call(t, srv, "POST", "/api/servers", tok, `{"name":"A","host":"127.0.0.1"}`, &sv)
 	var test model.Test
@@ -47,12 +47,12 @@ func TestTraceRoutes(t *testing.T) {
 	var tt model.Trace
 	for call(t, srv, "GET", path, tok, "", &tt) != http.StatusOK {
 		if time.Now().After(deadline) {
-			t.Fatal("Trace zum Test nicht rechtzeitig gespeichert")
+			t.Fatal("test trace not saved in time")
 		}
 		time.Sleep(20 * time.Millisecond)
 	}
 	if tt.TestID == nil || *tt.TestID != test.ID || tt.DestinationHost != "127.0.0.1" {
-		t.Errorf("Trace zum Test: %+v", tt)
+		t.Errorf("test trace: %+v", tt)
 	}
 	expectStatus(t, srv, "POST", path, tok, "", http.StatusBadRequest)
 	if call(t, srv, "GET", "/api/traces/test/"+itoa(test.ID), tok, "", &list); len(list) != 1 {
@@ -60,7 +60,7 @@ func TestTraceRoutes(t *testing.T) {
 	}
 	expectStatus(t, srv, "POST", "/api/tests/999/trace", tok, "", http.StatusNotFound)
 
-	// Löschen.
+	// Delete.
 	expectStatus(t, srv, "DELETE", path, tok, "", http.StatusOK)
 	expectStatus(t, srv, "DELETE", path, tok, "", http.StatusNotFound)
 	expectStatus(t, srv, "DELETE", "/api/traces/"+itoa(direct.ID), tok, "", http.StatusOK)

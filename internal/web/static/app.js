@@ -2,17 +2,15 @@
 
 // ---------- Theme ----------
 
-// cssVar liest einen Gestaltungswert (Token) des aktiven Themes, z. B. '--ok'.
-// Farben stehen nur in wedigo-tokens.css; Diagramme holen sie sich von dort.
+// cssVar reads a token of the active theme (e.g. '--ok'); colors live only in wedigo-tokens.css.
 function cssVar(name) {
   return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
 }
 
-// Gitterfarbe der Diagramme (aus --chart-grid, von applyChartTheme gesetzt).
+// Chart grid color from --chart-grid, set by applyChartTheme.
 let GRID = '';
 
-// applyChartTheme übernimmt Schrift, Achsen-, Gitter- und Legendenfarbe der
-// Diagramme aus den Tokens des aktiven Themes.
+// applyChartTheme takes chart font, axis, grid and legend colors from the active theme's tokens.
 function applyChartTheme() {
   GRID = cssVar('--chart-grid');
   if (window.Chart) {
@@ -26,8 +24,7 @@ function applyChartTheme() {
 }
 applyChartTheme();
 
-// setTheme setzt hell oder dunkel und speichert die Wahl (localStorage
-// "wedigo-theme"; ohne Wahl gilt Hell, siehe theme-init.js).
+// setTheme sets and saves light or dark (default light, see theme-init.js).
 function setTheme(mode) {
   if (mode !== 'light' && mode !== 'dark') return;
   const el = document.documentElement;
@@ -38,12 +35,12 @@ function setTheme(mode) {
   if (changed) onThemeChanged();
 }
 
-// toggleTheme wechselt zwischen hell und dunkel (Umschalter der Anmeldekarte).
+// toggleTheme backs the login card's light/dark toggle.
 function toggleTheme() {
   setTheme(document.documentElement.getAttribute('data-theme') === 'dark' ? 'light' : 'dark');
 }
 
-// markTheme markiert die aktive Darstellung im Benutzermenü.
+// markTheme marks the active theme in the user menu.
 function markTheme() {
   const cur = document.documentElement.getAttribute('data-theme') === 'dark' ? 'dark' : 'light';
   document.querySelectorAll('[data-theme-opt]').forEach(b => {
@@ -54,15 +51,14 @@ function markTheme() {
 }
 markTheme();
 
-// onThemeChanged lässt die aktive Seite themeabhängige Teile neu zeichnen
-// (Diagramme).
+// onThemeChanged lets the active page redraw theme-dependent parts (charts).
 function onThemeChanged() {
   applyChartTheme();
   const page = pages[currentTab];
   if (appActive() && page && page.onTheme) page.onTheme();
 }
 
-// ---------- Hilfsfunktionen ----------
+// ---------- Helpers ----------
 function esc(s) {
   return String(s == null ? '' : s).replace(/[&<>"']/g, c =>
     ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -79,18 +75,15 @@ function storageSet(key, value) {
 
 // ---------- API ----------
 
-// ApiError trägt den HTTP-Status und die Meldung aus {"detail": "..."}.
+// ApiError carries the HTTP status and the message from {"detail": "..."}.
 class ApiError extends Error {
   constructor(status, message) { super(message); this.status = status; }
 }
 
-// Die Sitzung steckt in einem HttpOnly-Cookie, das der Browser selbst
-// mitsendet. Ändernde Anfragen tragen zusätzlich das CSRF-Token, das der
-// Server beim Login bzw. mit /auth/me (Header X-CSRF-Token) liefert.
+// Session is an HttpOnly cookie; writes also send the CSRF token from login or /auth/me (X-CSRF-Token).
 let csrfToken = null;
 
-// api ruft die JSON-API auf. Bei 401 (Sitzung abgelaufen) erscheint die
-// Anmeldung. Accept-Language sorgt für Meldungen in der gewählten Sprache.
+// api calls the JSON API; 401 shows the login, Accept-Language localizes server messages.
 async function api(method, path, body) {
   const headers = { 'Accept-Language': LANG };
   if (method !== 'GET' && csrfToken) headers['X-CSRF-Token'] = csrfToken;
@@ -112,21 +105,18 @@ async function api(method, path, body) {
 }
 const apiGet = path => api('GET', path);
 
-// ---------- Sitzung ----------
+// ---------- Session ----------
 let currentUser = null;
 
-// Gastansicht: Mit auth.public_read zeigt die Oberfläche ohne Anmeldung
-// Dashboard, Tests, Peering-Map und Server als reine Leseansicht.
-// publicRead meldet der Server über /api/auth/status; guestMode ist true,
-// solange die Leseansicht angezeigt wird.
+// Guest view (auth.public_read): read-only UI without login. publicRead comes from
+// /api/auth/status; guestMode is true while the guest view is shown.
 let publicRead = false;
 let guestMode = false;
 
-// appActive meldet, ob die Anwendung angezeigt wird (angemeldet oder als Gast).
+// appActive reports whether the app is shown (signed in or guest).
 function appActive() { return !!currentUser || guestMode; }
 
-// loadAuthStatus holt den Anmeldezustand ohne Anmeldung (GET /api/auth/status)
-// und merkt sich, ob Gäste lesen dürfen. Im Zweifel gilt: keine Gastansicht.
+// loadAuthStatus fetches GET /api/auth/status unauthenticated; on doubt, no guest view.
 async function loadAuthStatus() {
   try {
     const r = await fetch('/api/auth/status', { credentials: 'same-origin' });
@@ -139,19 +129,16 @@ async function loadAuthStatus() {
   }
 }
 
-// leavePage verlässt die aktive Seite (Timer und Live-Abos beenden), bevor
-// die Ansicht wechselt (Anmeldung, Gastansicht, Anwendung).
+// leavePage stops the active page's timers and live subscriptions before a view switch.
 function leavePage() {
   if (currentTab && pages[currentTab].leave) pages[currentTab].leave();
   currentTab = null;
 }
 
-// Mindestlänge neuer Passwörter in Zeichen (wie auth.MinPasswordLength auf
-// dem Server). Bestehende kürzere Passwörter bleiben für die Anmeldung gültig.
+// Matches auth.MinPasswordLength on the server; existing shorter passwords still log in.
 const MIN_PASSWORD_LENGTH = 8;
 
-// passwordError prüft ein neues Passwort und liefert die Fehlermeldung oder ''.
-// Gezählt werden Zeichen (Codepoints), nicht UTF-16-Einheiten.
+// passwordError returns the error for a new password or ''; counts code points, not UTF-16 units.
 function passwordError(pw) {
   return [...pw].length < MIN_PASSWORD_LENGTH ? t('pw.tooShort', { n: MIN_PASSWORD_LENGTH }) : '';
 }
@@ -176,13 +163,11 @@ function showLogin(message) {
   updateFirstHint();
 }
 
-// openLogin öffnet aus der Gastansicht die Anmeldung (Kopfzeile, Benutzermenü).
+// openLogin opens the login from the guest view.
 function openLogin() { closeMenus(); showLogin(); }
 
-// updateFirstHint zeigt den Hinweis auf das beim ersten Start erzeugte
-// Passwort nur, solange der Admin es noch nicht geändert hat
-// (GET /api/auth/status, ohne Anmeldung). Im Zweifel bleibt er verborgen.
-// Dabei wird auch die Rückkehr zur Gastansicht ein- oder ausgeblendet.
+// updateFirstHint shows the initial-password hint until admin changed it (hidden on doubt),
+// and toggles the back-to-guest button.
 async function updateFirstHint() {
   const el = document.getElementById('firstHint');
   el.hidden = true;
@@ -191,9 +176,8 @@ async function updateFirstHint() {
   document.getElementById('guestBack').hidden = !publicRead;
 }
 
-// showGuest zeigt die Anwendung ohne Anmeldung als reine Leseansicht
-// (auth.public_read). Alle ändernden Bedienelemente sind über body.read-only
-// ausgeblendet; die API lehnt Änderungen von Gästen ohnehin mit 401 ab.
+// showGuest shows the read-only app (auth.public_read); body.read-only hides write
+// controls, and the API rejects guest writes with 401 anyway.
 function showGuest() {
   leavePage();
   currentUser = null;
@@ -252,8 +236,7 @@ async function submitLogin(ev) {
   }
 }
 
-// logout löscht das Sitzungs-Cookie auf dem Server und zeigt die Anmeldung,
-// mit auth.public_read stattdessen die Gastansicht.
+// logout clears the session cookie, then shows the login (or the guest view with auth.public_read).
 async function logout() {
   closeMenus();
   try {
@@ -265,9 +248,8 @@ async function logout() {
   else showLogin();
 }
 
-// forcePassword verlangt nach der ersten Anmeldung mit dem Startpasswort
-// (oder dem früheren Standardpasswort) ein eigenes Passwort, bevor die
-// Oberfläche erscheint. Der Server sperrt bis dahin alle anderen Aufrufe.
+// forcePassword demands a new password after login with the initial (or legacy default) one;
+// the server blocks all other calls until then.
 const forcePassword = {
   current: '',
 
@@ -281,7 +263,7 @@ const forcePassword = {
     document.getElementById('appMain').hidden = true;
     document.getElementById('loginForm').hidden = true;
     document.getElementById('forceForm').hidden = false;
-    // Nach dem Login ist das aktuelle Passwort bekannt; nach einem Neuladen nicht.
+    // The current password is known right after login, not after a reload.
     document.getElementById('forceCurrentField').hidden = !!this.current;
     ['forceCurrent', 'forceNew', 'forceRepeat'].forEach(id => { document.getElementById(id).value = ''; });
     this.error('');
@@ -318,8 +300,7 @@ const forcePassword = {
 
 // ---------- Navigation ----------
 
-// pages bündelt je Tab die Lade- und Aufräumfunktionen; die einzelnen Seiten
-// tragen sich in den folgenden Ausbaustufen hier ein.
+// pages holds each tab's load/cleanup hooks; the page modules below register themselves here.
 const pages = {
   dashboard: {},
   tests: {},
@@ -348,7 +329,7 @@ function showTab(tab) {
 
 window.addEventListener('hashchange', () => { if (appActive()) showTab(tabFromHash()); });
 
-// ---------- Menüs ----------
+// ---------- Menus ----------
 function toggleMenu(id) {
   const panel = document.getElementById(id);
   const open = panel.hidden;
@@ -362,23 +343,19 @@ document.addEventListener('click', ev => {
   if (!ev.target.closest('.menu')) closeMenus();
 });
 
-// Kleine Aktionen aus Kopfzeile und Menüs.
 function chooseLang(lang) { closeMenus(); setLang(lang); }
 function chooseTheme(mode) { closeMenus(); setTheme(mode); }
 function openPasswordDialog() { closeMenus(); passwordDialog.open(); }
 function startTestShortcut() { showTab('tests'); document.getElementById('tfServer').focus(); }
 
-// ---------- Aktionen ----------
+// ---------- Actions ----------
 
-// Die CSP erlaubt keine Inline-Handler (onclick="…"). Stattdessen tragen
-// Elemente data-click / data-change / data-input / data-submit mit dem Namen
-// einer Funktion ("showTab") oder Methode ("serversPage.openForm"); ein
-// Handler je Ereignistyp auf document ruft sie auf. Argumente:
-//   data-arg="…"     erstes Argument (nur Ziffern = Zahl)
-//   data-with-value  hängt den Wert des Elements (this.value) an
-//   data-self        nur auslösen, wenn das Element selbst geklickt wurde
-//                    (Hintergrund eines Dialogs)
-// submit-Handler erhalten das Ereignis.
+// The CSP forbids inline handlers, so elements name a function ("showTab") or method
+// ("serversPage.openForm") in data-click/-change/-input/-submit, dispatched from document.
+//   data-arg="…"     first argument (digits only = number)
+//   data-with-value  appends this.value
+//   data-self        only when the element itself is clicked (dialog backdrop)
+// Submit handlers receive the event.
 function actionRoots() {
   return { dashboard, testsPage, peering, serversPage, adminPage, passwordDialog, forcePassword, iperfSetup };
 }
@@ -406,18 +383,16 @@ function resolveAction(name) {
   });
 });
 
-// applyDynamic setzt Werte, die früher als style-Attribut im HTML standen
-// (die CSP verbietet Inline-Styles): data-pct → Breite in %, data-color →
-// Hintergrundfarbe. Über das CSSOM gesetzte Styles sind erlaubt.
+// applyDynamic maps data-pct to width % and data-color to background via CSSOM,
+// because the CSP forbids inline style attributes.
 function applyDynamic(root) {
   root.querySelectorAll('[data-pct]').forEach(el => { el.style.width = el.dataset.pct + '%'; });
   root.querySelectorAll('[data-color]').forEach(el => { el.style.background = el.dataset.color; });
 }
 
-// ---------- Sprache ----------
+// ---------- Language ----------
 
-// Die statischen Texte setzt setLang() selbst; hier bauen Statusmenü und
-// aktive Seite ihre dynamischen Inhalte in der neuen Sprache auf.
+// setLang() handles static texts; here the status menu and active page rebuild dynamic content.
 window.addEventListener('langchange', () => {
   if (!appActive()) return;
   loadStatus();
@@ -428,11 +403,11 @@ window.addEventListener('langchange', () => {
 // ---------- Status ----------
 let statusTimer = null;
 
-// Statussymbole als Inline-SVG (statt ●/⚠).
+// Status icons as inline SVG, never Unicode symbols.
 const ICON_DOT = '<svg class="status-ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="6" fill="currentColor"/></svg>';
 const ICON_ALERT = '<svg class="status-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg>';
 
-// loadStatus fasst Dienstzustand, Scheduler und laufende Tests im Statuspunkt zusammen.
+// loadStatus sums up service health, scheduler and running tests in the status dot.
 async function loadStatus() {
   const icon = document.getElementById('statusIcon');
   const btn = document.getElementById('statusBtn');
@@ -483,11 +458,10 @@ async function loadStatus() {
   panel.innerHTML = rows;
 }
 
-// iperfSetup fragt nach, wenn iperf3 fehlt, und meldet das Ergebnis einer
-// Installation. Installiert wird nur nach Bestätigung durch einen Admin.
+// iperfSetup offers to install a missing iperf3 (admin confirmation only) and reports the result.
 const iperfSetup = {
   status: null,
-  asked: false,       // einmal je Anmeldung nachfragen bzw. hinweisen
+  asked: false,       // ask or notify once per login
   prompting: false,
   wasInstalling: false,
 
@@ -502,7 +476,7 @@ const iperfSetup = {
     this.wasInstalling = ip.installing;
     if (ip.available || ip.installing || this.prompting || this.asked) return;
     this.asked = true;
-    // Gäste können nichts ausrichten und starten keine Tests: kein Hinweis.
+    // Guests can neither install nor run tests: no hint.
     if (!currentUser) return;
     if (!currentUser.is_admin) {
       notify(t('setup.missingUser'), 'warn');
@@ -546,9 +520,8 @@ function stopStatusPolling() {
   statusTimer = null;
 }
 
-// mapConfig liefert die Kartenkonfiguration (eigener Kachelserver oder leer
-// für die eingebettete Weltkarte); einmal je Anmeldung bzw. Gastansicht von
-// /api/status geholt.
+// mapConfig returns the map config (own tile server, or empty for the embedded map);
+// fetched from /api/status once per login or guest view.
 let mapConfigPromise = null;
 function mapConfig() {
   if (!mapConfigPromise) {
@@ -565,9 +538,9 @@ async function loadInfo() {
   } catch (e) {}
 }
 
-// ---------- Meldungen ----------
+// ---------- Toasts ----------
 
-// notify zeigt eine kurze Meldung unten rechts (kind: ok | warn | err).
+// notify shows a toast at the bottom right (kind: ok | warn | err).
 function notify(message, kind = 'ok') {
   let box = document.getElementById('toasts');
   if (!box) {
@@ -579,7 +552,7 @@ function notify(message, kind = 'ok') {
   el.className = 'toast toast-' + kind;
   el.textContent = message;
   box.appendChild(el);
-  // Höchstens drei Meldungen gleichzeitig, damit sie keine Formulare verdecken.
+  // At most three toasts so they do not cover forms.
   while (box.children.length > 3) box.firstChild.remove();
   setTimeout(() => el.remove(), { ok: 3500, err: 7000, warn: 12000 }[kind] || 3500);
 }
@@ -588,10 +561,9 @@ function notify(message, kind = 'ok') {
 const ICON_PLAY = '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><polygon points="6 3 20 12 6 21 6 3"/></svg>';
 const ICON_MAP = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14.106 5.553a2 2 0 0 0 1.788 0l3.659-1.83A1 1 0 0 1 21 4.619v12.764a1 1 0 0 1-.553.894l-4.553 2.277a2 2 0 0 1-1.788 0l-4.212-2.106a2 2 0 0 0-1.788 0l-3.659 1.83A1 1 0 0 1 3 19.381V6.618a1 1 0 0 1 .553-.894l4.553-2.277a2 2 0 0 1 1.788 0z"/><path d="M15 5.764v15"/><path d="M9 3.236v15"/></svg>';
 
-// ---------- Gemeinsame Daten ----------
+// ---------- Shared data ----------
 
-// Farbpalette je Server; die Zuordnung folgt der Server-ID, damit ein Server in
-// allen Diagrammen und Karten dieselbe Farbe hat.
+// Palette indexed by server ID so a server keeps its color across all charts and cards.
 const SERIES_COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#8b5cf6', '#ef4444', '#06b6d4', '#ec4899', '#f97316'];
 function serverColor(servers, id) {
   const ids = servers.map(s => s.id).sort((a, b) => a - b);
@@ -600,17 +572,14 @@ function serverColor(servers, id) {
 }
 
 function protocolLabel(p) { return (p || '').toUpperCase(); }
-// hopCity returns the city of a hop. Versions before 2026.10.28 stored an
-// estimated hop without a known city as LEGACY_UNKNOWN_CITY (German); it is
-// shown as unknown in the UI language.
+// hopCity returns a hop's city; LEGACY_UNKNOWN_CITY (German, stored before 2026.10.28) shows as unknown.
 const LEGACY_UNKNOWN_CITY = '? Unbekannt';
 function hopCity(h) { return h.city === LEGACY_UNKNOWN_CITY ? '? ' + t('unknown') : h.city; }
 function directionLabel(d) { return STRINGS['dir.' + d] ? t('dir.' + d) : d; }
 function streamsLabel(n) { return t(n === 1 ? 'streams.one' : 'streams.other', { n }); }
 
-// syncCards gleicht ein Raster stabiler Karten ab (je Schlüssel ein Element):
-// Karten bleiben erhalten, ihr Inhalt wird nur bei Änderungen ersetzt. So gehen
-// Hover, Fokus und Klicks bei periodischen Aktualisierungen nicht verloren.
+// syncCards keeps one element per key and replaces content only on change,
+// so hover, focus and clicks survive periodic refreshes.
 function syncCards(container, cards, cls = 'ds-card') {
   const existing = new Map();
   [...container.children].forEach(el => (el.dataset.key ? existing.set(el.dataset.key, el) : el.remove()));
@@ -629,12 +598,10 @@ function syncCards(container, cards, cls = 'ds-card') {
   existing.forEach(el => el.remove());
 }
 
-// ---------- Live-Status der Tests (Server-Sent Events) ----------
+// ---------- Live test status (Server-Sent Events) ----------
 
-// liveFeed hält eine EventSource-Verbindung zu /api/tests/live/stream. Der
-// Server meldet sofort und bei jeder Änderung alle wartenden, laufenden und
-// gerade beendeten Tests (ersetzt das frühere Abfragen alle 0,7 bzw. 1,5 s).
-// Bricht die Verbindung ab, verbindet EventSource sich selbst neu.
+// liveFeed holds an EventSource on /api/tests/live/stream, which pushes pending, running and
+// just-finished tests on every change; EventSource reconnects by itself.
 const liveFeed = {
   source: null,
   tests: [],
@@ -657,7 +624,7 @@ const liveFeed = {
     this.source = null;
     this.tests = [];
   },
-  // subscribe ruft fn sofort und bei jeder Änderung auf; liefert die Abmeldung.
+  // subscribe calls fn now and on every change; returns the unsubscribe function.
   subscribe(fn) {
     this.listeners.add(fn);
     fn(this.tests);
@@ -665,7 +632,7 @@ const liveFeed = {
   },
 };
 
-// openPeering wechselt zur Peering-Map und wählt dort den Server vor.
+// openPeering switches to the peering map with the server preselected.
 let pendingPeeringServer = null;
 function openPeering(serverId) {
   pendingPeeringServer = serverId;
@@ -689,8 +656,8 @@ const dashboard = {
   servers: [],
   stats: [],
   tests: [],
-  liveIds: new Set(),      // Test-IDs im letzten Live-Stand
-  liveByServer: new Map(), // Server-ID → Live-Status
+  liveIds: new Set(),      // test IDs in the last live snapshot
+  liveByServer: new Map(), // server ID → live status
   charts: {},
   timers: [],
   unsubscribe: null,
@@ -752,8 +719,7 @@ const dashboard = {
     }
   },
 
-  // belowThreshold zählt Tests im Zeitraum, die in einer gemessenen Richtung
-  // unter dem jeweiligen Schwellwert liegen.
+  // belowThreshold counts tests in range below the threshold in any measured direction.
   belowThreshold() {
     return this.tests.filter(x =>
       (x.download_bandwidth_mbps != null && x.download_bandwidth_mbps < this.thrDown) ||
@@ -780,8 +746,7 @@ const dashboard = {
     this.renderChart('chartUp', 'upload_bandwidth_mbps', this.thrUp);
   },
 
-  // renderChart zeichnet den Verlauf je Server in der Serienfarbe. Schwellwert
-  // (--warn) und Messpunkte darunter (--crit) nutzen die Statusfarben des Themes.
+  // renderChart draws one series per server; threshold uses --warn, points below it --crit.
   renderChart(canvasId, key, threshold) {
     const thresholdColor = cssVar('--warn');
     const belowColor = cssVar('--crit');
@@ -796,7 +761,7 @@ const dashboard = {
 
     const now = Date.now();
     const min = now - RANGE_HOURS[this.range] * 3600e3;
-    const points = new Map(); // Server-ID → Punkte
+    const points = new Map(); // server ID → points
     for (const x of this.tests) {
       const v = x[key];
       if (v == null || v <= 0) continue;
@@ -817,7 +782,7 @@ const dashboard = {
       };
     });
     const max = Math.max(threshold, ...datasets.flatMap(ds => ds.data.map(p => p.y)));
-    // Skala in üblichen Leitungsstufen: 1 / 2,5 / 10 Gbit/s, darüber in 10-Gbit-Schritten.
+    // Scale snaps to common link speeds: 1 / 2.5 / 10 Gbit/s, then 10 Gbit/s steps.
     const yMax = max <= 1000 ? 1000 : max <= 2500 ? 2500 : max <= 10000 ? 10000 : Math.ceil(max / 10000) * 10000;
     datasets.push({
       label: t('dash.threshold'), isThreshold: true, data: [{ x: min, y: threshold }, { x: now, y: threshold }],
@@ -845,7 +810,7 @@ const dashboard = {
             position: 'bottom',
             labels: {
               usePointStyle: true, boxWidth: 8, boxHeight: 8,
-              // Legende in der Serienfarbe, nicht in der (ggf. roten) Farbe des ersten Punkts.
+              // Legend uses the series color, not the first point's (maybe red) color.
               generateLabels: chart => Chart.defaults.plugins.legend.labels.generateLabels(chart).map(l => {
                 const c = chart.data.datasets[l.datasetIndex].borderColor;
                 return Object.assign(l, { fillStyle: c, strokeStyle: c });
@@ -923,15 +888,14 @@ const dashboard = {
     }));
   },
 
-  // onLive übernimmt den Live-Stand aus liveFeed. Der Server meldet einen Test
-  // noch 10 s nach Ende, so bleiben die Endwerte kurz sichtbar; fällt er aus
-  // der Liste, werden Kennzahlen und Diagramme neu geladen.
+  // onLive applies liveFeed updates; finished tests stay listed 10 s, and when one drops out
+  // KPIs and charts reload.
   onLive(tests) {
     const byServer = new Map();
     const ids = new Set();
     for (const l of tests) {
       ids.add(l.test_id);
-      // Bei mehreren Tests eines Servers hat der laufende Vorrang vor wartenden.
+      // A running test beats pending ones of the same server.
       const prev = byServer.get(l.server_id);
       if (!prev || prev.status === 'pending') byServer.set(l.server_id, l);
     }
@@ -962,10 +926,9 @@ const dashboard = {
 };
 pages.dashboard = dashboard;
 
-// ---------- Bestätigungsdialog ----------
+// ---------- Confirm dialog ----------
 
-// confirmDialog fragt eine Bestätigung ab und liefert true bei "OK". danger
-// färbt die Bestätigung rot (Löschen); sonst erscheint sie als normale Aktion.
+// confirmDialog resolves true on OK; danger styles the OK button red (delete).
 function confirmDialog(title, text, okLabel, danger = true, cancelLabel = t('cancel')) {
   const modal = document.getElementById('confirmModal');
   document.getElementById('confirmTitle').textContent = title;
@@ -992,7 +955,7 @@ function confirmDialog(title, text, okLabel, danger = true, cancelLabel = t('can
   });
 }
 
-// ---------- Server-Profile ----------
+// ---------- Server profiles ----------
 
 const ICON_EDIT = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21.174 6.812a1 1 0 0 0-3.986-3.987L3.842 16.174a2 2 0 0 0-.5.83l-1.321 4.352a.5.5 0 0 0 .623.622l4.353-1.32a2 2 0 0 0 .83-.497z"/></svg>';
 const ICON_POWER = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 2v10"/><path d="M18.4 6.6a9 9 0 1 1-12.77.04"/></svg>';
@@ -1001,12 +964,12 @@ const ICON_TRASH = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" 
 const serversPage = {
   servers: [],
   publicServers: null,
-  editing: null, // Server-ID beim Bearbeiten, sonst null
+  editing: null, // server ID while editing, else null
 
   enter() { this.load(); },
   onLang() {
     this.render();
-    // Orte und Beschreibungen der öffentlichen Server neu laden.
+    // Public server locations and descriptions are localized, so reload them.
     this.publicServers = null;
     const sel = this.val('sfPublic');
     while (sel.options.length > 1) sel.remove(1);
@@ -1105,7 +1068,7 @@ const serversPage = {
     document.removeEventListener('keydown', this.onKey);
   },
 
-  // syncForm blendet abhängige Felder ein oder aus (UDP-Rate, Intervall, Auto-Trace).
+  // syncForm toggles dependent fields (UDP rate, interval, auto-trace).
   syncForm() {
     const udp = this.val('sfProto').value === 'udp';
     const sched = this.val('sfSchedule').checked;
@@ -1223,9 +1186,9 @@ const testsPage = {
   pageSize: 50,
   skip: 0,
   hasMore: false,
-  // Live-Panel: verfolgter Test, sein Verlauf und das Ergebnis des letzten Tests.
+  // Live panel: tracked test, its history and the last result.
   liveId: null,
-  liveSeen: false,     // verfolgter Test war schon im Live-Strom
+  liveSeen: false,     // tracked test has appeared in the live stream
   liveData: null,
   liveStart: 0,
   series: [],
@@ -1257,7 +1220,7 @@ const testsPage = {
     this.loadServers();
     this.renderLive();
     this.reloadList();
-    // Fehlermeldungen kommen übersetzt vom Server, daher Ergebnis und Details neu laden.
+    // Error messages are translated server-side, so reload result and details.
     if (this.final) {
       const id = this.final.id;
       apiGet('/tests/' + id).then(f => { if (this.final && this.final.id === id) { this.final = f; this.renderLive(); } }).catch(() => {});
@@ -1268,7 +1231,7 @@ const testsPage = {
     }
   },
 
-  // ----- Formular -----
+  // ----- Form -----
   async loadServers() {
     try {
       this.servers = (await apiGet('/servers')).sort((a, b) => a.name.localeCompare(b.name, LANG));
@@ -1293,7 +1256,7 @@ const testsPage = {
     filter.value = prevFilter;
   },
 
-  // applyServerDefaults belegt das Formular mit den Vorgaben des gewählten Servers.
+  // applyServerDefaults fills the form with the selected server's defaults.
   applyServerDefaults() {
     const sv = this.servers.find(s => String(s.id) === document.getElementById('tfServer').value);
     if (!sv) return;
@@ -1336,7 +1299,7 @@ const testsPage = {
     }
   },
 
-  // ----- Live-Panel -----
+  // ----- Live panel -----
   adopt(id) {
     this.liveId = id;
     this.liveSeen = false;
@@ -1348,8 +1311,7 @@ const testsPage = {
     this.onLive(liveFeed.tests);
   },
 
-  // onLive verfolgt den aktuellen Test über liveFeed. Ohne eigenen Test wird
-  // ein laufender oder wartender übernommen (z. B. vom Scheduler gestartet).
+  // onLive tracks the current test; without one it adopts a running or pending test (e.g. scheduled).
   onLive(tests) {
     if (!this.liveId) {
       const next = tests.find(x => x.status === 'running') || tests.find(x => x.status === 'pending');
@@ -1360,7 +1322,7 @@ const testsPage = {
     const id = this.liveId;
     const l = tests.find(x => x.test_id === id);
     if (!l) {
-      // Noch nicht im Strom (gerade gestartet) – oder schon wieder heraus.
+      // Not in the stream yet (just started), or already gone.
       if (this.liveSeen) this.finish(id);
       return;
     }
@@ -1376,7 +1338,7 @@ const testsPage = {
     this.renderLive();
   },
 
-  // finish lädt das gespeicherte Ergebnis des verfolgten Tests.
+  // finish loads the tracked test's stored result.
   async finish(id) {
     if (this.liveId !== id) return;
     this.liveId = null;
@@ -1441,7 +1403,7 @@ const testsPage = {
       this.spark.update('none');
       return;
     }
-    // Farben wie die Live-Kacheln: Download --accent, Upload --ok.
+    // Same colors as the live tiles: download --accent, upload --ok.
     const line = (label, data, color) => ({ label, data, borderColor: color, backgroundColor: color, borderWidth: 2, pointRadius: 0, tension: 0.3 });
     this.spark = new Chart(document.getElementById('liveSpark'), {
       type: 'line',
@@ -1460,7 +1422,7 @@ const testsPage = {
     });
   },
 
-  // ----- Verlauf -----
+  // ----- History -----
   reloadList() {
     this.skip = 0;
     this.tests = [];
@@ -1496,7 +1458,7 @@ const testsPage = {
     document.getElementById('tlMore').hidden = !this.hasMore;
   },
 
-  // ----- Details -----
+  // ----- Detail -----
   async openDetail(id) {
     let test;
     try {
@@ -1541,7 +1503,7 @@ const testsPage = {
   },
 
   onKey(ev) {
-    // Escape im Bestätigungsdialog schließt nur diesen.
+    // Escape in the confirm dialog closes only that dialog.
     if (ev.key === 'Escape' && document.getElementById('confirmModal').hidden) testsPage.closeDetail();
   },
 
@@ -1567,17 +1529,14 @@ const testsPage = {
 };
 pages.tests = testsPage;
 
-// ---------- Peering-Map ----------
+// ---------- Peering map ----------
 
-// Kartenhintergrund: standardmäßig die eingebettete Weltkarte (Natural Earth
-// 1:110m als Vektor, gemeinfrei) – ohne jeden Abruf von fremden Servern. Ihre
-// Farben setzt das CSS (.map-land), sie folgen so dem Theme. Wer einen eigenen
-// Kachelserver hat, trägt ihn als map.tile_url in die Konfiguration ein.
+// Default background is the embedded Natural Earth 1:110m vector map (public domain, no external
+// fetches, themed via .map-land); map.tile_url in the config selects an own tile server.
 const WORLD_URL = '/static/vendor/naturalearth/world-110m.geojson';
 const naturalEarthAttribution = () => t('map.dataBy', { src: '<a href="https://www.naturalearthdata.com/" rel="noopener">Natural Earth</a>' });
 const osmAttribution = () => '&copy; ' + t('map.osmContributors', { osm: '<a href="https://www.openstreetmap.org/copyright" rel="noopener">OpenStreetMap</a>' });
-// Herkunft der Standortdaten; den Quellenhinweis verlangen die Lizenzen von
-// DB-IP (CC BY 4.0) und MaxMind auf jeder Seite, die Ergebnisse zeigt.
+// Geo data source; DB-IP (CC BY 4.0) and MaxMind licenses require attribution wherever results show.
 const GEO_SOURCES = {
   dbip: { name: 'DB-IP City Lite', attribution: '<a href="https://db-ip.com" rel="noopener">IP Geolocation by DB-IP</a>' },
   maxmind: { name: 'MaxMind GeoLite2', attribution: 'GeoLite2 data by <a href="https://www.maxmind.com" rel="noopener">MaxMind</a>' },
@@ -1595,14 +1554,14 @@ function worldGeoJSON() {
 
 const peering = {
   map: null,
-  base: null,          // Hintergrund: Weltkarte (GeoJSON) oder Kachelebene
+  base: null,          // background: world map (GeoJSON) or tile layer
   layer: null,
   servers: [],
   traces: [],
   serverId: null,
-  trace: null,         // angezeigter gespeicherter Trace
-  live: null,          // { source, host, hops } während einer Live-Traceroute
-  geoAttribution: '',  // aktueller Quellenhinweis der Standortdaten
+  trace: null,         // displayed saved trace
+  live: null,          // { source, host, hops } during a live traceroute
+  geoAttribution: '',  // current geo data attribution
 
   async enter() {
     this.initMap();
@@ -1612,7 +1571,7 @@ const peering = {
       const id = pendingPeeringServer;
       pendingPeeringServer = null;
       this.selectServer(id);
-      // Gäste sehen nur die gespeicherten Traces; eine Live-Traceroute ist eine Aktion.
+      // Guests see saved traces only; a live traceroute is a write action.
       if (!this.live && currentUser) this.startLive();
     }
   },
@@ -1624,7 +1583,7 @@ const peering = {
     }
     if (!this.map) {
       this.map = L.map('pmMap', { worldCopyJump: true, minZoom: 2 }).setView([50.5, 10], 4);
-      // Eigene Ebene unter Routen und Markern für den Kartenhintergrund.
+      // Own pane for the background, below routes and markers.
       this.map.createPane('basemap').style.zIndex = 250;
       this.layer = L.layerGroup().addTo(this.map);
       this.setBase();
@@ -1634,7 +1593,7 @@ const peering = {
 
   onLang() {
     this.setRunning(!!this.live);
-    // Die Kartenquelle steht in der Attribution; Hintergrund neu anlegen.
+    // The attribution names the map source, so recreate the background.
     if (this.base) { this.base.remove(); this.base = null; }
     this.setBase();
     if (!window.L) this.mapMessage(t('peering.noLeaflet'));
@@ -1664,8 +1623,7 @@ const peering = {
     }).addTo(this.map);
   },
 
-  // updateGeoAttribution zeigt die Quelle der Standortdaten in der Karte an.
-  // Sie kann sich zur Laufzeit ändern (erster Download, Wechsel zu MaxMind).
+  // updateGeoAttribution shows the geo data source; it can change at runtime (first download, MaxMind).
   async updateGeoAttribution() {
     if (!this.map) return;
     let html = '';
@@ -1744,7 +1702,7 @@ const peering = {
       </button>`).join('');
   },
 
-  // show zeigt den Live-Trace bzw. den gewählten gespeicherten Trace auf Karte und in den Details.
+  // show renders the live or selected saved trace on the map and in the details.
   show() {
     const hops = this.live ? this.live.hops : (this.trace ? this.trace.hops : []);
     this.drawMap(hops);
@@ -1752,7 +1710,7 @@ const peering = {
     this.renderOverlay();
   },
 
-  // hopKind bestimmt die Markierung: erster Hop, Ziel, geschätzter Standort oder normal.
+  // hopKind picks the marker: first hop, destination, estimated location or normal.
   hopKind(h, i, hops) {
     if (!h.responded) return 'timeout';
     const destIP = this.live ? null : this.trace && this.trace.destination_ip;
@@ -1773,8 +1731,7 @@ const peering = {
     }
     this.mapMessage('');
     const coords = geo.map(([h]) => [h.latitude, h.longitude]);
-    // Route in der Akzentfarbe, Marker nach Art: erster Hop --ok, Ziel --crit,
-    // geschätzter Standort --warn (Klassen in app.css).
+    // Route in accent; markers: first --ok, destination --crit, estimated --warn (classes in app.css).
     L.polyline(coords, { className: 'hop-route', color: cssVar('--accent'), weight: 3, opacity: 0.75, dashArray: '10, 6' }).addTo(this.layer);
     for (const [h, i] of geo) {
       const kind = this.hopKind(h, i, hops);
@@ -1841,7 +1798,7 @@ const peering = {
     }).join('') || `<tr><td colspan="5" class="muted empty">${t('peering.noHops')}</td></tr>`;
   },
 
-  // ----- Live-Traceroute (Server-Sent Events) -----
+  // ----- Live traceroute (Server-Sent Events) -----
   toggleLive() {
     if (this.live) this.stopLive(true);
     else this.startLive();
@@ -1850,7 +1807,7 @@ const peering = {
   startLive() {
     const sv = this.server();
     if (!sv) return;
-    // Angemeldet wird über das Sitzungs-Cookie, das EventSource mitsendet.
+    // Auth via the session cookie, which EventSource sends.
     const url = `/api/live-trace/stream/${encodeURIComponent(sv.host)}?lang=${LANG}`;
     const source = new EventSource(url);
     this.live = { source, host: sv.host, hops: [], done: false };
@@ -1880,8 +1837,7 @@ const peering = {
           break;
       }
     };
-    // Ohne close() würde EventSource nach Verbindungsende neu verbinden und
-    // damit eine weitere Traceroute starten.
+    // Without close() EventSource would reconnect and start another traceroute.
     source.onerror = () => {
       if (this.live && this.live.source === source) {
         notify(t('peering.lost'), 'err');
@@ -1933,7 +1889,7 @@ const peering = {
 };
 pages.peering = peering;
 
-// ---------- Passwort ändern ----------
+// ---------- Change password ----------
 
 const passwordDialog = {
   el: id => document.getElementById(id),
@@ -1977,7 +1933,7 @@ const passwordDialog = {
   },
 };
 
-// ---------- Administration ----------
+// ---------- Admin ----------
 
 const adminPage = {
   adminOnly: true,
@@ -2034,7 +1990,7 @@ const adminPage = {
     }).join('');
   },
 
-  // ----- Benutzer anlegen -----
+  // ----- Create user -----
   openUserForm() {
     ['ufName', 'ufMail', 'ufPass'].forEach(id => { document.getElementById(id).value = ''; });
     document.getElementById('ufAdmin').checked = false;
@@ -2091,7 +2047,7 @@ const adminPage = {
     }
   },
 
-  // ----- Bereinigung -----
+  // ----- Cleanup -----
   syncCleanup() {
     document.getElementById('ctDaysField').hidden = document.getElementById('ctScope').value !== 'days';
     document.getElementById('crDaysField').hidden = document.getElementById('crScope').value !== 'days';
@@ -2154,14 +2110,14 @@ pages.admin = adminPage;
 // ---------- Start ----------
 (async function init() {
   loadInfo();
-  // Frühere Versionen hielten das Token im localStorage; jetzt HttpOnly-Cookie.
+  // Older versions kept the token in localStorage; now it is an HttpOnly cookie.
   storageSet('iperf-token', null);
   try {
     const me = await apiGet('/auth/me');
     if (me.must_change_password) forcePassword.show(me, '');
     else showApp(me);
   } catch (e) {
-    // Nicht angemeldet: mit auth.public_read die Leseansicht, sonst die Anmeldung.
+    // Not signed in: guest view with auth.public_read, else the login.
     if (e.status === 401) await loadAuthStatus();
     if (e.status === 401 && publicRead) showGuest();
     else showLogin(e.status === 401 ? '' : t('login.unreachable', { msg: e.message }));

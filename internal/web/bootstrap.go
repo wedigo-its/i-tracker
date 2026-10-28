@@ -11,9 +11,8 @@ import (
 	"i-tracker/internal/store"
 )
 
-// EnsureAdmin legt den ersten Admin an, solange kein Benutzer existiert. Das
-// Passwort wird zufällig erzeugt, einmal deutlich ins Log geschrieben und muss
-// bei der ersten Anmeldung geändert werden. created meldet, ob angelegt wurde.
+// EnsureAdmin creates the first admin while no user exists, with a random
+// password that is logged once and must be changed at first sign-in.
 func EnsureAdmin(ctx context.Context, st *store.Store) (created bool, err error) {
 	created, password, err := createFirstAdmin(ctx, st)
 	if err != nil || !created {
@@ -27,8 +26,7 @@ func EnsureAdmin(ctx context.Context, st *store.Store) (created bool, err error)
 	return true, nil
 }
 
-// InitialPasswordHook wird nach dem Anlegen des ersten Admins aufgerufen
-// (z. B. um das Passwort im Dienstbetrieb zusätzlich in eine Datei zu schreiben).
+// InitialPasswordHook runs after the first admin is created (e.g. to also write the password to a file as a service).
 var InitialPasswordHook func(username, password string)
 
 func createFirstAdmin(ctx context.Context, st *store.Store) (bool, string, error) {
@@ -50,8 +48,7 @@ func createFirstAdmin(ctx context.Context, st *store.Store) (bool, string, error
 	return true, password, nil
 }
 
-// FlagLegacyDefaultPassword erzwingt den Passwortwechsel für den Admin, wenn
-// er noch das feste Standardpasswort früherer Versionen (admin123) nutzt.
+// FlagLegacyDefaultPassword forces a password change if the admin still uses the old fixed default (admin123).
 func FlagLegacyDefaultPassword(ctx context.Context, st *store.Store) error {
 	u, err := st.UserByUsername(ctx, auth.DefaultAdminUsername)
 	if errors.Is(err, store.ErrNotFound) {
@@ -70,9 +67,8 @@ func FlagLegacyDefaultPassword(ctx context.Context, st *store.Store) error {
 	return nil
 }
 
-// legacyPasswordCache merkt sich, ob ein Admin-Hash das frühere
-// Standardpasswort enthält. So rechnet der öffentliche Aufruf
-// /api/auth/status Argon2id nur einmal je Hash statt bei jeder Anfrage.
+// legacyPasswordCache caches the legacy-password check per hash so the public
+// /api/auth/status runs Argon2id once per hash, not per request.
 type legacyPasswordCache struct {
 	mu     sync.Mutex
 	hash   string
@@ -88,10 +84,8 @@ func (c *legacyPasswordCache) isLegacy(hash string) bool {
 	return c.legacy
 }
 
-// initialPasswordPending meldet, ob der Admin noch das beim ersten Start
-// erzeugte Passwort hat: Passwortwechsel ausstehend, aber nicht wegen des
-// früheren Standardpassworts (das wurde nie erzeugt und angezeigt). Nach dem
-// Wechsel bleibt es false, weil ChangePassword must_change_password aufhebt.
+// initialPasswordPending reports whether the admin still has the generated
+// first-start password (change pending, but not due to the legacy default).
 func (s *Server) initialPasswordPending(ctx context.Context) (bool, error) {
 	u, err := s.store.UserByUsername(ctx, auth.DefaultAdminUsername)
 	if errors.Is(err, store.ErrNotFound) {

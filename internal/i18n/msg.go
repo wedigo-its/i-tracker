@@ -10,21 +10,16 @@ import (
 	"fmt"
 )
 
-// Msg is one translatable message made at run time: a catalog key and its
-// arguments, or (without a key) text from elsewhere that is shown as it is,
-// such as the output of iperf3. Arguments are messages themselves, so a
-// nested message ("Installation failed: winget is not available") is
-// rendered in the viewer's language as a whole. A Msg is stored next to the
-// English text of the message (see Localize).
+// Msg is a catalog key with arguments, or keyless foreign text shown as is (e.g. iperf3 output).
+// Arguments are Msgs, so nested messages translate as a whole; stored beside the English text (Localize).
 type Msg struct {
 	Key  string `json:"k,omitempty"`
 	Args []Msg  `json:"a,omitempty"`
 	Text string `json:"t,omitempty"`
 }
 
-// M builds a message for key. Arguments that are a Msg or an error stay
-// translatable; every other argument is rendered with fmt.Sprint, so the
-// catalog texts of runtime messages use %s only (TestRuntimeKeysUseStringVerbs).
+// M builds a message for key; Msg and error args stay translatable, others use fmt.Sprint,
+// so runtime catalog texts use %s only (TestRuntimeKeysUseStringVerbs).
 func M(key string, args ...any) Msg {
 	m := Msg{Key: key}
 	for _, a := range args {
@@ -59,7 +54,7 @@ func (m Msg) In(lang string) string {
 	return T(lang, m.Key, args...)
 }
 
-// String renders the message in English, the language of logs and stored texts.
+// String renders the message in English (logs, stored texts).
 func (m Msg) String() string { return m.In(EN) }
 
 // Known reports whether every key of the message is in the catalogs.
@@ -77,8 +72,7 @@ func (m Msg) Known() bool {
 	return true
 }
 
-// Encode returns the stored form of m (JSON), or "" for a message without a
-// key: plain text needs no second column.
+// Encode returns m as JSON for storage, or "" without a key (plain text needs no second column).
 func (m Msg) Encode() string {
 	if m.Key == "" {
 		return ""
@@ -98,12 +92,9 @@ func DecodeMsg(s string) (m Msg, ok bool) {
 	return m, true
 }
 
-// Localize renders a stored message in lang. encoded is the stored Msg,
-// english the English text stored with it. The Msg is used when every key is
-// known to this version and it still renders to english (an older version
-// that wrote only the English column leaves a stale Msg behind). Rows from
-// versions before 2026.10.28 hold German text and no Msg; known German
-// messages are recognized (see legacy.go). Anything else is shown as stored.
+// Localize renders a stored message in lang. The encoded Msg is used only if all keys are known
+// and it still renders to english (older versions may leave it stale); pre-2026.10.28 German rows
+// are matched via legacy.go; anything else is shown as stored.
 func Localize(lang, encoded, english string) string {
 	if m, ok := storedMsg(encoded, english); ok {
 		return m.In(lang)
@@ -111,8 +102,7 @@ func Localize(lang, encoded, english string) string {
 	return english
 }
 
-// StoredKey returns the catalog key of a stored message, as Localize renders
-// it, or "" when it is shown as stored (text of another program, unknown key).
+// StoredKey returns the key Localize would render with, or "" when shown as stored.
 func StoredKey(encoded, english string) string {
 	m, _ := storedMsg(encoded, english)
 	return m.Key
@@ -137,9 +127,7 @@ func LocalizePtr(lang, encoded string, english *string) *string {
 
 // Errors
 
-// Error is an error whose message can be shown in the viewer's language.
-// Error() returns the English text, so logs and callers that only know the
-// error interface see English; the web UI renders it with ErrorIn.
+// Error is a translatable error; Error() is English for logs, the web UI uses ErrorIn.
 type Error struct {
 	Key  string
 	Args []any
@@ -150,8 +138,7 @@ type Error struct {
 // E returns an error with the message key and arguments.
 func E(key string, args ...any) error { return &Error{Key: key, Args: args} }
 
-// Wrap returns an error with the message key, the arguments and cause as the
-// last argument; errors.Is and errors.As see cause.
+// Wrap is E with cause as the last argument, visible to errors.Is and errors.As.
 func Wrap(cause error, key string, args ...any) error {
 	return &Error{Key: key, Args: args, Cause: cause}
 }
@@ -174,18 +161,14 @@ func (e *Error) Error() string { return e.Msg().String() }
 // Unwrap returns the cause.
 func (e *Error) Unwrap() error { return e.Cause }
 
-// Foreign returns an error with text from another program (iperf3,
-// traceroute, the operating system). It has no translation and is shown as
-// it is; using it marks that on purpose.
+// Foreign marks untranslatable text from another program (iperf3, traceroute, the OS) as intended.
 func Foreign(text string) error { return foreignError(text) }
 
 type foreignError string
 
 func (e foreignError) Error() string { return string(e) }
 
-// MsgOf returns err as a message: the *Error in its chain when err adds no
-// text of its own, else the text of err as it is (it comes from another
-// program or library, or wraps a message with untranslated context).
+// MsgOf returns the *Error in err's chain if err adds no text of its own, else err's text as is.
 func MsgOf(err error) Msg {
 	if err == nil {
 		return Msg{}

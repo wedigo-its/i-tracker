@@ -10,8 +10,8 @@ import (
 	"i-tracker/internal/model"
 )
 
-// readFixture liefert die Intervall- und Abschlussdaten eines echten
-// iperf3-Mitschnitts (iperf 3.21, `--json-stream`, gegen 127.0.0.1).
+// readFixture returns interval and end data of a real iperf3 capture
+// (iperf 3.21, `--json-stream`, against 127.0.0.1).
 func readFixture(t *testing.T, name string) (intervals []intervalData, end *endData) {
 	t.Helper()
 	f, err := os.Open(filepath.Join("testdata", name))
@@ -65,7 +65,7 @@ func checkResult(t *testing.T, got, want model.TestResult) {
 	}
 	for _, f := range fields {
 		if !eqF(f.got, f.want) {
-			t.Errorf("%s = %v, erwartet %v", f.name, deref(f.got), deref(f.want))
+			t.Errorf("%s = %v, want %v", f.name, deref(f.got), deref(f.want))
 		}
 	}
 	if !eqI(got.DownloadBytes, want.DownloadBytes) || !eqI(got.UploadBytes, want.UploadBytes) || !eqI(got.Retransmits, want.Retransmits) {
@@ -115,11 +115,11 @@ func TestEndResult(t *testing.T) {
 		t.Run(c.fixture, func(t *testing.T) {
 			_, end := readFixture(t, c.fixture)
 			if end == nil {
-				t.Fatal("kein end-Ereignis")
+				t.Fatal("no end event")
 			}
 			got, ok := endResult(*end, c.dir)
 			if !ok {
-				t.Fatal("endResult: keine Ergebnisse")
+				t.Fatal("endResult: no results")
 			}
 			checkResult(t, got, c.want)
 		})
@@ -127,7 +127,7 @@ func TestEndResult(t *testing.T) {
 }
 
 func TestEndResultRetransmits(t *testing.T) {
-	// Linux-iperf3 liefert retransmits beim Sender; bei bidir werden beide Richtungen addiert.
+	// Linux iperf3 reports retransmits at the sender; bidir adds both directions.
 	var d endData
 	if err := json.Unmarshal([]byte(`{
 		"sum_sent": {"bytes": 1, "bits_per_second": 1e6, "retransmits": 3},
@@ -141,21 +141,21 @@ func TestEndResultRetransmits(t *testing.T) {
 		t.Fatalf("Retransmits = %v, ok = %v", derefI(got.Retransmits), ok)
 	}
 	if got, ok := endResult(d, model.DirectionUpload); !ok || *got.Retransmits != 3 {
-		t.Fatalf("Upload-Retransmits = %v", derefI(got.Retransmits))
+		t.Fatalf("upload retransmits = %v", derefI(got.Retransmits))
 	}
 }
 
 func TestEndResultMissingDirection(t *testing.T) {
 	_, end := readFixture(t, "tcp_download.jsonl")
 	if _, ok := endResult(*end, model.DirectionBidirectional); ok {
-		t.Error("Bidir-Auswertung eines Download-Tests darf nicht ok sein")
+		t.Error("bidir evaluation of a download test must not be ok")
 	}
 }
 
 func TestIntervalRates(t *testing.T) {
 	iv, _ := readFixture(t, "tcp_bidir_p2.jsonl")
 	if len(iv) == 0 {
-		t.Fatal("keine Intervalle")
+		t.Fatal("no intervals")
 	}
 	r := intervalRates(iv[0], model.DirectionBidirectional)
 	if !eqF(r.UploadMbps, f64(43912.55)) || !eqF(r.DownloadMbps, f64(45041.63)) {
@@ -178,15 +178,15 @@ func TestArgs(t *testing.T) {
 	}
 	for i := range want {
 		if got[i] != want[i] {
-			t.Fatalf("Args = %v, erwartet %v", got, want)
+			t.Fatalf("Args = %v, want %v", got, want)
 		}
 	}
 
 	test.Protocol, test.Direction = model.ProtocolTCP, model.DirectionUpload
-	// Bei TCP wird keine Zielbandbreite übergeben, auch wenn eine gesetzt ist.
+	// TCP passes no target bandwidth even if one is set.
 	for _, a := range Args("h", 1, test) {
 		if a == "-R" || a == "--bidir" || a == "-u" || a == "-b" {
-			t.Errorf("Upload/TCP darf %s nicht enthalten", a)
+			t.Errorf("upload/TCP must not contain %s", a)
 		}
 	}
 }

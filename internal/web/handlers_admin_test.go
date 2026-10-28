@@ -19,7 +19,7 @@ func TestAdminRoutes(t *testing.T) {
 	}
 	expectStatus(t, srv, "GET", "/api/admin/stats/database", user, "", http.StatusForbidden)
 
-	// Ohne Einschränkung wird nichts gelöscht.
+	// No scope: nothing is deleted.
 	expectStatus(t, srv, "DELETE", "/api/admin/cleanup/tests", admin, "", http.StatusBadRequest)
 	expectStatus(t, srv, "DELETE", "/api/admin/cleanup/traces", admin, "", http.StatusBadRequest)
 	expectStatus(t, srv, "DELETE", "/api/admin/cleanup/tests?days=-1", admin, "", http.StatusUnprocessableEntity)
@@ -38,7 +38,7 @@ func TestAdminRoutes(t *testing.T) {
 
 	var res map[string]any
 	if call(t, srv, "DELETE", "/api/admin/cleanup/tests?days=1", admin, "", &res); res["deleted_count"] != 0.0 {
-		t.Errorf("days=1 darf den neuen Test nicht löschen: %v", res)
+		t.Errorf("days=1 must not delete the new test: %v", res)
 	}
 	if call(t, srv, "DELETE", "/api/admin/cleanup/tests?server_id="+itoa(sv.ID), admin, "", &res); res["deleted_count"] != 1.0 {
 		t.Errorf("server_id: %v", res)
@@ -54,14 +54,14 @@ func TestPublicServers(t *testing.T) {
 
 	var all []model.PublicServer
 	if code := call(t, srv, "GET", "/api/public-servers", "", "", &all); code != http.StatusOK || len(all) != 11 {
-		t.Fatalf("Liste ohne Anmeldung: %d, %d Einträge", code, len(all))
+		t.Fatalf("list without sign-in: %d, %d entries", code, len(all))
 	}
 	var found []model.PublicServer
 	if call(t, srv, "GET", "/api/public-servers/search?query=DEUTSCHLAND", "", "", &found); len(found) != 3 {
-		t.Errorf("Suche nach Ort: %+v", found)
+		t.Errorf("search by location: %+v", found)
 	}
 	if call(t, srv, "GET", "/api/public-servers/search?query=init7", "", "", &found); len(found) != 1 || found[0].Host != "speedtest.init7.net" {
-		t.Errorf("Suche nach Anbieter: %+v", found)
+		t.Errorf("search by provider: %+v", found)
 	}
 	expectStatus(t, srv, "GET", "/api/public-servers/search", "", "", http.StatusUnprocessableEntity)
 }
@@ -74,9 +74,9 @@ func TestInstallIperfRoute(t *testing.T) {
 
 	expectStatus(t, srv, "POST", "/api/iperf3/install", "", "", http.StatusUnauthorized)
 	expectStatus(t, srv, "POST", "/api/iperf3/install", user, "", http.StatusForbidden)
-	// Der Test-Runner wurde nicht vorbereitet und gilt daher nicht als installierbar.
+	// The unprepared test runner counts as not installable.
 	var res map[string]any
 	if code := call(t, srv, "POST", "/api/iperf3/install", admin, "", &res); code != http.StatusConflict {
-		t.Fatalf("nicht installierbar: %d, %v", code, res)
+		t.Fatalf("not installable: %d, %v", code, res)
 	}
 }

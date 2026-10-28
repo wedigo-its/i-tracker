@@ -15,10 +15,9 @@ import (
 	"i-tracker/internal/store"
 )
 
-// TestHelperProcess ist kein echter Test: Der Runner startet die Test-Binary
-// mit diesem Testnamen als Ersatz für iperf3. Sie gibt das Fixture aus
-// IPERF_HELPER_FIXTURE zeilenweise aus, protokolliert ihre Argumente nach
-// IPERF_HELPER_ARGS und endet mit dem Code aus IPERF_HELPER_EXIT.
+// TestHelperProcess is not a real test but stands in for iperf3: it prints
+// IPERF_HELPER_FIXTURE line by line, writes its args to IPERF_HELPER_ARGS and
+// exits with IPERF_HELPER_EXIT.
 func TestHelperProcess(t *testing.T) {
 	fixture := os.Getenv("IPERF_HELPER_FIXTURE")
 	if fixture == "" {
@@ -51,7 +50,7 @@ type runnerEnv struct {
 	store  *store.Store
 	runner *Runner
 	server *model.Server
-	args   string // Datei mit den Argumenten des letzten Aufrufs
+	args   string // file with the last call's args
 }
 
 func newRunnerEnv(t *testing.T, fixture string, exitCode int) *runnerEnv {
@@ -64,7 +63,7 @@ func newRunnerEnv(t *testing.T, fixture string, exitCode int) *runnerEnv {
 	st := store.New(conn)
 
 	sv := &model.Server{ServerSettings: model.DefaultServerSettings()}
-	sv.Name, sv.Host = "lokal", "127.0.0.1"
+	sv.Name, sv.Host = "local", "127.0.0.1"
 	if err := st.CreateServer(context.Background(), sv); err != nil {
 		t.Fatal(err)
 	}
@@ -90,7 +89,7 @@ func (e *runnerEnv) submit(t *testing.T, dir model.Direction) *model.Test {
 	return test
 }
 
-// waitDone wartet, bis der Test einen Endstatus hat, und liefert ihn mit Rohausgabe.
+// waitDone waits for a final status and returns the test with raw output.
 func (e *runnerEnv) waitDone(t *testing.T, id int64) *model.TestDetail {
 	t.Helper()
 	deadline := time.Now().Add(15 * time.Second)
@@ -104,7 +103,7 @@ func (e *runnerEnv) waitDone(t *testing.T, id int64) *model.TestDetail {
 		}
 		time.Sleep(50 * time.Millisecond)
 	}
-	t.Fatalf("Test %d nicht rechtzeitig beendet", id)
+	t.Fatalf("test %d did not finish in time", id)
 	return nil
 }
 
@@ -114,27 +113,27 @@ func TestRunnerCompleted(t *testing.T) {
 
 	d := env.waitDone(t, test.ID)
 	if d.Status != model.StatusCompleted || d.ErrorMessage != nil {
-		t.Fatalf("Status %s, Fehler %v", d.Status, d.ErrorMessage)
+		t.Fatalf("status %s, error %v", d.Status, d.ErrorMessage)
 	}
 	if !eqF(d.DownloadBandwidthMbps, f64(30625.96)) || d.UploadBandwidthMbps != nil {
-		t.Errorf("Download %v, Upload %v", deref(d.DownloadBandwidthMbps), deref(d.UploadBandwidthMbps))
+		t.Errorf("download %v, upload %v", deref(d.DownloadBandwidthMbps), deref(d.UploadBandwidthMbps))
 	}
 	if d.StartedAt == nil || d.CompletedAt == nil || d.CompletedAt.Before(*d.StartedAt) {
-		t.Errorf("Zeitstempel: %v – %v", d.StartedAt, d.CompletedAt)
+		t.Errorf("timestamps: %v - %v", d.StartedAt, d.CompletedAt)
 	}
 	if d.RawOutput == nil || !strings.Contains(*d.RawOutput, `"event":"end"`) {
-		t.Error("Rohausgabe fehlt")
+		t.Error("raw output missing")
 	}
 
 	args, _ := os.ReadFile(env.args)
 	if !strings.Contains(string(args), "-c 127.0.0.1 -p 5201 -t 2 -P 1") || !strings.Contains(string(args), "-R") {
-		t.Errorf("iperf3-Argumente: %s", args)
+		t.Errorf("iperf3 args: %s", args)
 	}
 
-	// Der Live-Status bleibt nach Testende mit den Endwerten abrufbar.
+	// The live status with final values stays available after the test ends.
 	l, ok := env.runner.Live(test.ID)
 	if !ok || l.Status != model.StatusCompleted || l.Progress != 100 || l.CurrentDownloadMbps != 30625.96 {
-		t.Errorf("Live nach Ende: %+v, ok=%v", l, ok)
+		t.Errorf("live after end: %+v, ok=%v", l, ok)
 	}
 }
 
@@ -144,10 +143,10 @@ func TestRunnerIperfError(t *testing.T) {
 
 	d := env.waitDone(t, test.ID)
 	if d.Status != model.StatusFailed || d.ErrorMessage == nil || !strings.Contains(*d.ErrorMessage, "Connection refused") {
-		t.Fatalf("Status %s, Fehler %v", d.Status, deref2(d.ErrorMessage))
+		t.Fatalf("status %s, error %v", d.Status, deref2(d.ErrorMessage))
 	}
 	if l, _ := env.runner.Live(test.ID); l.Status != model.StatusFailed {
-		t.Errorf("Live-Status %s", l.Status)
+		t.Errorf("live status %s", l.Status)
 	}
 }
 
@@ -159,29 +158,29 @@ func TestRunnerSequential(t *testing.T) {
 	a := env.waitDone(t, first.ID)
 	b := env.waitDone(t, second.ID)
 	if a.Status != model.StatusCompleted || b.Status != model.StatusCompleted {
-		t.Fatalf("Status %s / %s", a.Status, b.Status)
+		t.Fatalf("status %s / %s", a.Status, b.Status)
 	}
-	// Nacheinander und ohne Wartezeit dazwischen.
+	// Sequential, with no wait in between.
 	x, y := a, b
 	if y.StartedAt.Before(*x.StartedAt) {
 		x, y = y, x
 	}
 	if y.StartedAt.Before(*x.CompletedAt) {
-		t.Errorf("Tests liefen parallel: %v < %v", y.StartedAt, x.CompletedAt)
+		t.Errorf("tests ran in parallel: %v < %v", y.StartedAt, x.CompletedAt)
 	}
 	if gap := y.StartedAt.Sub(*x.CompletedAt); gap > 2*time.Second {
-		t.Errorf("Lücke zwischen den Tests zu groß: %s", gap)
+		t.Errorf("gap between tests too large: %s", gap)
 	}
 }
 
 func TestRunnerMissingBinary(t *testing.T) {
 	env := newRunnerEnv(t, "tcp_upload.jsonl", 0)
-	env.runner.command = []string{filepath.Join(t.TempDir(), "kein-iperf3")}
+	env.runner.command = []string{filepath.Join(t.TempDir(), "no-iperf3")}
 	test := env.submit(t, model.DirectionUpload)
 
 	d := env.waitDone(t, test.ID)
 	if d.Status != model.StatusFailed || d.ErrorMessage == nil || !strings.Contains(*d.ErrorMessage, "iperf3 not found") {
-		t.Fatalf("Status %s, Fehler %v", d.Status, deref2(d.ErrorMessage))
+		t.Fatalf("status %s, error %v", d.Status, deref2(d.ErrorMessage))
 	}
 }
 

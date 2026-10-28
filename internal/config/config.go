@@ -1,7 +1,6 @@
-// Package config lädt die Anwendungskonfiguration aus config.yaml. Jeder
-// Schlüssel lässt sich per Umgebungsvariable IPERF3_<ABSCHNITT>_<SCHLÜSSEL>
-// überschreiben (z. B. IPERF3_WEB_LISTEN, IPERF3_STORAGE_PATH); die früheren
-// Namen ohne Präfix gelten weiter als veraltete Aliase (siehe env.go).
+// Package config loads config.yaml. Every key can be overridden via
+// IPERF3_<SECTION>_<KEY> (e.g. IPERF3_WEB_LISTEN); the old unprefixed names
+// remain as deprecated aliases (see env.go).
 package config
 
 import (
@@ -19,12 +18,11 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// DefaultListen ist die Adresse, wenn web.listen weder in der Datei noch per
-// Umgebung gesetzt ist: nur lokal erreichbar. Die beim ersten Start erzeugte
-// config.yaml und das Docker-Image setzen ausdrücklich 0.0.0.0:8000.
+// DefaultListen applies if web.listen is unset (local only); the generated
+// config.yaml and the Docker image set 0.0.0.0:8000 explicitly.
 const DefaultListen = "127.0.0.1:8000"
 
-// Config bündelt die gesamte Anwendungskonfiguration.
+// Config holds the whole application configuration.
 type Config struct {
 	Web       WebConfig       `yaml:"web"`
 	Storage   StorageConfig   `yaml:"storage"`
@@ -35,40 +33,36 @@ type Config struct {
 	Map       MapConfig       `yaml:"map"`
 	Log       LogConfig       `yaml:"log"`
 
-	// Dir ist das Verzeichnis der Config-Datei; relative Pfade beziehen sich darauf.
+	// Dir is the config file's directory; relative paths resolve against it.
 	Dir string `yaml:"-"`
-	// Warnings sammelt Hinweise beim Laden (z. B. veraltete Umgebungsvariablen),
-	// die erst nach dem Einrichten des Loggers ausgegeben werden können.
+	// Warnings collects load notices (e.g. deprecated env vars) to log once the logger exists.
 	Warnings []string `yaml:"-"`
 }
 
-// WebConfig konfiguriert den HTTP-Server.
+// WebConfig configures the HTTP server.
 type WebConfig struct {
 	Listen string `yaml:"listen"`
 }
 
-// StorageConfig konfiguriert die SQLite-Datenbank.
+// StorageConfig configures the SQLite database.
 type StorageConfig struct {
 	Path string `yaml:"path"`
 }
 
-// AuthConfig konfiguriert die Anmeldung.
+// AuthConfig configures sign-in.
 type AuthConfig struct {
-	// SecretKey signiert die Sitzungen (JWT, HS256) und leitet die CSRF-Tokens ab.
+	// SecretKey signs sessions (JWT, HS256) and derives CSRF tokens.
 	SecretKey string `yaml:"secret_key"`
-	// SessionTTL ist die Gültigkeit einer Sitzung ohne Aktivität (z. B. 12h).
-	// Bei Aktivität verlängert sie sich gleitend.
+	// SessionTTL is the sliding idle session lifetime (e.g. 12h).
 	SessionTTL string `yaml:"session_ttl"`
-	// PublicRead zeigt Besuchern ohne Anmeldung Dashboard, Tests, Traces und
-	// Server als reine Leseansicht (Standard: an). Ändern lässt sich ohne
-	// Anmeldung nichts; aus = jede Anfrage verlangt eine Anmeldung.
+	// PublicRead gives guests a read-only view of dashboard, tests, traces and
+	// servers (default on); off = every request requires sign-in.
 	PublicRead bool `yaml:"public_read"`
-	// SecretGenerated ist true, wenn kein Schlüssel konfiguriert war und für
-	// diese Laufzeit ein zufälliger erzeugt wurde.
+	// SecretGenerated is true if no key was configured and a random one is used for this run.
 	SecretGenerated bool `yaml:"-"`
 }
 
-// SessionDuration liefert die Sitzungsdauer (leer = 12h).
+// SessionDuration returns the session lifetime (empty = 12h).
 func (a AuthConfig) SessionDuration() (time.Duration, error) {
 	if a.SessionTTL == "" {
 		return 12 * time.Hour, nil
@@ -76,51 +70,46 @@ func (a AuthConfig) SessionDuration() (time.Duration, error) {
 	return time.ParseDuration(a.SessionTTL)
 }
 
-// SchedulerConfig steuert die zeitgesteuerten Tests.
+// SchedulerConfig controls scheduled tests.
 type SchedulerConfig struct {
 	Enabled bool `yaml:"enabled"`
 }
 
-// IperfConfig konfiguriert die iperf3-Binary.
+// IperfConfig configures the iperf3 binary.
 type IperfConfig struct {
-	// Path zur iperf3-Binary; leer = automatisch suchen (PATH, unter Windows
-	// zusätzlich übliche Installationsorte).
+	// Path to iperf3; empty = auto-detect (PATH, on Windows also common install dirs).
 	Path string `yaml:"path"`
-	// AutoInstall installiert iperf3 beim Start ohne Nachfrage über den
-	// Paketmanager, falls es fehlt. Standard ist aus: dann fragt die Oberfläche
-	// einen Admin, bevor installiert wird (sinnvoll ohne Oberfläche, z. B. Docker).
+	// AutoInstall installs a missing iperf3 at startup via the package manager
+	// without asking (for headless setups, e.g. Docker); off = the UI asks an admin.
 	AutoInstall bool `yaml:"auto_install"`
 }
 
-// GeoIPConfig konfiguriert die City-Datenbank für Trace-Standorte.
+// GeoIPConfig configures the city database for trace locations.
 type GeoIPConfig struct {
-	// Path ist der Ablageort der Datenbank (MMDB-Format).
+	// Path is the database location (MMDB).
 	Path string `yaml:"path"`
-	// AutoUpdate lädt die Datenbank herunter und hält sie aktuell: ohne
-	// MaxMind-Zugang DB-IP City Lite (kein Account, monatlich), mit Zugang
-	// MaxMind GeoLite2 City.
+	// AutoUpdate downloads and refreshes the database: DB-IP City Lite (no
+	// account, monthly) or, with MaxMind credentials, GeoLite2 City.
 	AutoUpdate bool `yaml:"auto_update"`
-	// MaxMindAccountID und MaxMindLicenseKey sind optional (kostenloser
-	// Account unter maxmind.com); gesetzt wird GeoLite2 statt DB-IP geladen.
+	// MaxMindAccountID and MaxMindLicenseKey are optional (free maxmind.com
+	// account); if set, GeoLite2 is used instead of DB-IP.
 	MaxMindAccountID  string `yaml:"maxmind_account_id"`
 	MaxMindLicenseKey string `yaml:"maxmind_license_key"`
 }
 
-// MapConfig konfiguriert den Kartenhintergrund der Peering-Map.
+// MapConfig configures the peering map background.
 type MapConfig struct {
-	// TileURL ist eine Kachel-URL mit {z}, {x} und {y} (z. B. eines eigenen
-	// Kachelservers). Leer = eingebettete Weltkarte (Natural Earth), ohne
-	// jeden Abruf von fremden Servern.
+	// TileURL is a tile URL with {z}, {x} and {y}; empty = embedded world map
+	// (Natural Earth), no external requests.
 	TileURL string `yaml:"tile_url"`
-	// TileAttribution ist der Quellenhinweis für die Kacheln (HTML erlaubt).
-	// Leer = OpenStreetMap-Hinweis.
+	// TileAttribution is the tile credit (HTML allowed); empty = OpenStreetMap notice.
 	TileAttribution string `yaml:"tile_attribution"`
 }
 
-// tilePlaceholders ersetzt die Leaflet-Platzhalter für die URL-Prüfung.
+// tilePlaceholders replaces Leaflet placeholders for URL validation.
 var tilePlaceholders = strings.NewReplacer("{s}", "a", "{z}", "0", "{x}", "0", "{y}", "0", "{r}", "")
 
-// TileOrigin liefert Schema und Host der Kachel-URL (für die CSP) oder "".
+// TileOrigin returns the tile URL's scheme and host (for the CSP) or "".
 func (m MapConfig) TileOrigin() string {
 	if m.TileURL == "" {
 		return ""
@@ -129,7 +118,7 @@ func (m MapConfig) TileOrigin() string {
 	if err != nil || u.Host == "" {
 		return ""
 	}
-	// Platzhalter für Subdomains ({s}.tile.example.org) als Wildcard erlauben.
+	// Allow the subdomain placeholder ({s}.tile.example.org) as a wildcard.
 	host := u.Host
 	if strings.HasPrefix(m.TileURL, u.Scheme+"://{s}.") {
 		host = "*." + strings.TrimPrefix(host, "a.")
@@ -137,15 +126,15 @@ func (m MapConfig) TileOrigin() string {
 	return u.Scheme + "://" + host
 }
 
-// LogConfig steuert die Protokollierung.
+// LogConfig controls logging.
 type LogConfig struct {
-	// Level: debug, info, warn oder error.
+	// Level: debug, info, warn or error.
 	Level string `yaml:"level"`
-	// Format: text (Standard) oder json.
+	// Format: text (default) or json.
 	Format string `yaml:"format"`
 }
 
-// SlogLevel liefert das konfigurierte Log-Level (debug, info, warn, error).
+// SlogLevel returns the configured log level (default info).
 func (l LogConfig) SlogLevel() slog.Level {
 	var lvl slog.Level
 	if err := lvl.UnmarshalText([]byte(l.Level)); err != nil {
@@ -154,8 +143,7 @@ func (l LogConfig) SlogLevel() slog.Level {
 	return lvl
 }
 
-// defaultYAML ist der Inhalt einer neu erzeugten config.yaml; %s ist der
-// zufällig erzeugte Token-Schlüssel.
+// defaultYAML is a new config.yaml; %s is the random token key.
 const defaultYAML = `# i-Tracker – configuration
 # Every key can be overridden with an environment variable
 # IPERF3_<SECTION>_<KEY>, e.g. IPERF3_WEB_LISTEN, IPERF3_STORAGE_PATH,
@@ -215,8 +203,7 @@ log:
   format: "text"
 `
 
-// CreateDefault schreibt eine Standard-config.yaml mit frisch erzeugtem
-// Token-Schlüssel nach path und gibt die geparste Konfiguration zurück.
+// CreateDefault writes a default config.yaml with a fresh token key to path and loads it.
 func CreateDefault(path string) (*Config, error) {
 	content := fmt.Sprintf(defaultYAML, newSecret())
 	if dir := filepath.Dir(path); dir != "" {
@@ -230,8 +217,7 @@ func CreateDefault(path string) (*Config, error) {
 	return Load(path)
 }
 
-// Load lädt die Konfiguration aus einer YAML-Datei und wendet anschließend
-// die Umgebungsvariablen an.
+// Load reads the YAML config, then applies environment variables.
 func Load(path string) (*Config, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
@@ -246,7 +232,7 @@ func Load(path string) (*Config, error) {
 		return nil, err
 	}
 
-	// Relative Pfade relativ zum Verzeichnis der Config-Datei auflösen.
+	// Resolve relative paths against the config file's directory.
 	cfg.Dir = filepath.Dir(filepath.Clean(path))
 	for _, p := range []*string{&cfg.Storage.Path, &cfg.GeoIP.Path} {
 		if !filepath.IsAbs(*p) {

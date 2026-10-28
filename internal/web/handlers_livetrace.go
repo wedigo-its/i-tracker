@@ -16,11 +16,10 @@ import (
 	"i-tracker/internal/trace"
 )
 
-// sseKeepAlive ist der Abstand der Keep-Alive-Kommentare, damit Proxys lange
-// Timeout-Hops nicht als tote Verbindung abbrechen.
+// sseKeepAlive keeps proxies from dropping the stream during long timeout hops.
 const sseKeepAlive = 15 * time.Second
 
-// sseStream schreibt Server-Sent Events; send und ping sind nebenläufig nutzbar.
+// sseStream writes Server-Sent Events; safe for concurrent use.
 type sseStream struct {
 	mu sync.Mutex
 	w  http.ResponseWriter
@@ -32,12 +31,12 @@ func newSSEStream(w http.ResponseWriter) *sseStream {
 	h.Set("Content-Type", "text/event-stream")
 	h.Set("Cache-Control", "no-cache")
 	h.Set("Connection", "keep-alive")
-	h.Set("X-Accel-Buffering", "no") // nginx: nicht puffern
+	h.Set("X-Accel-Buffering", "no") // disable nginx buffering
 	w.WriteHeader(http.StatusOK)
 	return &sseStream{w: w, rc: http.NewResponseController(w)}
 }
 
-// send schreibt v als JSON in ein data-Event (ohne Event-Namen).
+// send writes v as JSON in an unnamed data event.
 func (s *sseStream) send(v any) {
 	data, err := json.Marshal(v)
 	if err != nil {
@@ -55,18 +54,15 @@ func (s *sseStream) write(chunk string) {
 	s.rc.Flush()
 }
 
-// handleLiveTrace streamt eine Routenverfolgung Hop für Hop:
-// start → hop … → interpolation_complete → complete, im Fehlerfall error.
-// Angemeldet wird über das Sitzungs-Cookie (EventSource sendet es mit) oder
-// ein Bearer-Token (API-Clients). Auch Anmeldefehler werden als error-Event gemeldet, weil EventSource
-// den HTTP-Status nicht auswerten kann. Schließt der Client die Verbindung,
-// wird die Verfolgung abgebrochen und nicht gespeichert.
+// handleLiveTrace streams a trace hop by hop: start → hop … →
+// interpolation_complete → complete, or error. Auth errors are error events too,
+// since EventSource cannot read the HTTP status. A client disconnect cancels
+// the trace without saving it.
 func (s *Server) handleLiveTrace(w http.ResponseWriter, r *http.Request) {
 	destination := r.PathValue("destination")
 	stream := newSSEStream(w)
 	lang := i18n.FromRequest(r)
-	// fail sends err as an error event, in the request language; code is its
-	// catalog key, as in error responses.
+	// fail sends err as an error event; code is its catalog key, as in error responses.
 	fail := func(err error) {
 		stream.send(map[string]string{"type": "error", "message": i18n.ErrorIn(lang, err), "code": i18n.KeyOf(err)})
 	}
@@ -118,7 +114,7 @@ func (s *Server) handleLiveTrace(w http.ResponseWriter, r *http.Request) {
 	}
 	stream.send(map[string]any{"type": "interpolation_complete", "hops": tr.Hops})
 
-	// Speichern vor "complete": Die Oberfläche lädt danach die Historie neu.
+	// Save before "complete": the UI then reloads the history.
 	if err := s.store.CreateTrace(context.WithoutCancel(ctx), tr); err != nil {
 		slog.Error("Live trace could not be saved", "destination", destination, "error", err)
 		fail(i18n.E("err.trace.save_failed"))

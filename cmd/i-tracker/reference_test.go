@@ -9,15 +9,15 @@ import (
 	"testing"
 )
 
-var updateReference = flag.Bool("update", false, "docs/handbook/reference.json neu schreiben")
+var updateReference = flag.Bool("update", false, "rewrite docs/handbook/reference.json")
 
 const (
 	referenceFile = "../../docs/handbook/reference.json"
 	handbookDir   = "../../docs/handbook/"
 )
 
-// TestReferenceFileIsCurrent hält docs/handbook/reference.json auf dem Stand des Codes.
-// Neu schreiben: go test ./cmd/i-tracker -run TestReferenceFileIsCurrent -update
+// TestReferenceFileIsCurrent keeps docs/handbook/reference.json in sync with the code.
+// Rewrite: go test ./cmd/i-tracker -run TestReferenceFileIsCurrent -update
 func TestReferenceFileIsCurrent(t *testing.T) {
 	want, err := marshalReference()
 	if err != nil {
@@ -33,7 +33,7 @@ func TestReferenceFileIsCurrent(t *testing.T) {
 		t.Fatal(err)
 	}
 	if !bytes.Equal(bytes.ReplaceAll(got, []byte("\r\n"), []byte("\n")), want) {
-		t.Fatal("docs/handbook/reference.json ist veraltet: go test ./cmd/i-tracker -run TestReferenceFileIsCurrent -update")
+		t.Fatal("docs/handbook/reference.json is outdated: go test ./cmd/i-tracker -run TestReferenceFileIsCurrent -update")
 	}
 }
 
@@ -42,8 +42,8 @@ var (
 	section = regexp.MustCompile(`(?m)^## ([a-z0-9-]+) \| `)
 )
 
-// TestHandbookCoversReference prüft, dass beide Sprachfassungen des Handbuchs jeden
-// Schlüssel, jede Option und jede Route erklären und nichts erklären, was es nicht mehr gibt.
+// TestHandbookCoversReference checks that both handbook languages explain every key,
+// flag and route, and nothing that no longer exists.
 func TestHandbookCoversReference(t *testing.T) {
 	ref := buildReference()
 	required := map[string]bool{}
@@ -68,16 +68,16 @@ func TestHandbookCoversReference(t *testing.T) {
 		for _, m := range defItem.FindAllStringSubmatch(text, -1) {
 			key := strings.Trim(m[1], "`")
 			if documented[key] {
-				t.Errorf("%s.md: %q ist doppelt erklärt", lang, key)
+				t.Errorf("%s.md: %q explained twice", lang, key)
 			}
 			documented[key] = true
 			if !required[key] {
-				t.Errorf("%s.md erklärt %q, das es im Code nicht (mehr) gibt", lang, key)
+				t.Errorf("%s.md explains %q, which is not in the code", lang, key)
 			}
 		}
 		for key := range required {
 			if !documented[key] {
-				t.Errorf("%s.md: Erklärung für %q fehlt", lang, key)
+				t.Errorf("%s.md: explanation for %q missing", lang, key)
 			}
 		}
 		var ids []string
@@ -87,6 +87,6 @@ func TestHandbookCoversReference(t *testing.T) {
 		sections[i] = strings.Join(ids, ",")
 	}
 	if sections[0] != sections[1] {
-		t.Errorf("Abschnitte unterscheiden sich:\n de: %s\n en: %s", sections[0], sections[1])
+		t.Errorf("sections differ:\n de: %s\n en: %s", sections[0], sections[1])
 	}
 }

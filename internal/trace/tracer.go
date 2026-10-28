@@ -19,36 +19,35 @@ import (
 	"i-tracker/internal/model"
 )
 
-// maxDuration begrenzt eine Routenverfolgung insgesamt. Bereits ermittelte
-// Hops bleiben bei Überschreitung erhalten.
+// maxDuration caps a whole trace; hops found so far are kept.
 const maxDuration = 90 * time.Second
 
-// reverseDNSTimeout begrenzt die Namensauflösung je Hop.
+// reverseDNSTimeout caps the reverse lookup per hop.
 const reverseDNSTimeout = 1500 * time.Millisecond
 
-// Options steuern eine Routenverfolgung.
+// Options control a trace.
 type Options struct {
-	MaxHops int // maximale Anzahl Hops
-	WaitSec int // Wartezeit je Probe in Sekunden
-	Probes  int // Proben je Hop (nur traceroute; tracert sendet immer 3)
+	MaxHops int
+	WaitSec int // wait per probe
+	Probes  int // probes per hop (traceroute only; tracert always sends 3)
 }
 
-// DefaultOptions: 30 Hops, 2 s Wartezeit je Probe, 3 Proben.
+// DefaultOptions returns 30 hops, 2 s wait per probe, 3 probes.
 func DefaultOptions() Options { return Options{MaxHops: 30, WaitSec: 2, Probes: 3} }
 
-// HopFunc wird für jeden Hop aufgerufen, sobald er ermittelt ist (Live-Ansicht).
+// HopFunc is called for each hop as soon as it is known (live view).
 type HopFunc func(model.TraceHop)
 
-// Tracer führt Routenverfolgungen aus.
+// Tracer runs route traces.
 type Tracer struct {
 	geo *GeoIP
-	// command ersetzt tracert/traceroute (Tests); die Ziel-IP wird angehängt.
+	// command replaces tracert/traceroute (tests); the target IP is appended.
 	command    []string
 	lookupAddr func(ctx context.Context, ip string) ([]string, error)
 }
 
-// NewTracer erstellt einen Tracer. geo darf nil sein (dann ohne Standorte).
-// command ersetzt optional tracert/traceroute; die Ziel-IP wird angehängt.
+// NewTracer creates a Tracer; geo may be nil (no locations). command optionally
+// replaces tracert/traceroute; the target IP is appended.
 func NewTracer(geo *GeoIP, command ...string) *Tracer {
 	t := &Tracer{geo: geo, lookupAddr: net.DefaultResolver.LookupAddr}
 	if len(command) > 0 {
@@ -57,8 +56,8 @@ func NewTracer(geo *GeoIP, command ...string) *Tracer {
 	return t
 }
 
-// Run verfolgt die Route zu destination. Die Verfolgung endet, sobald das
-// Ziel antwortet. Fehler werden im Trace vermerkt (Completed = false).
+// Run traces the route to destination, stopping once the target answers.
+// Errors are recorded in the trace (Completed = false).
 func (t *Tracer) Run(ctx context.Context, destination string, opts Options, onHop HopFunc) *model.Trace {
 	started := db.Now()
 	tr := &model.Trace{DestinationHost: destination, StartedAt: &started, Hops: []model.TraceHop{}}
@@ -91,7 +90,7 @@ func (t *Tracer) Run(ctx context.Context, destination string, opts Options, onHo
 	})
 
 	Interpolate(tr.Hops, rand.New(rand.NewPCG(rand.Uint64(), rand.Uint64())))
-	// RTT bis zum Ziel = Laufzeit des letzten antwortenden Hops.
+	// Total RTT = RTT of the last answering hop.
 	for i := len(tr.Hops) - 1; i >= 0; i-- {
 		if tr.Hops[i].RTTMs != nil {
 			tr.TotalRTTMs = tr.Hops[i].RTTMs
@@ -106,8 +105,8 @@ func (t *Tracer) Run(ctx context.Context, destination string, opts Options, onHo
 	return tr
 }
 
-// trace startet das Werkzeug und übergibt jede Hop-Zeile an handle. Liefert
-// handle true, wird das Werkzeug beendet (Ziel erreicht).
+// trace runs the tool and passes each hop line to handle; handle returning
+// true (target reached) kills the tool.
 func (t *Tracer) trace(ctx context.Context, destIP string, o Options, handle func(rawHop) bool) error {
 	name, args := t.commandLine(destIP, o)
 	cmd := exec.CommandContext(ctx, name, args...)
@@ -165,7 +164,7 @@ func (t *Tracer) commandLine(destIP string, o Options) (string, []string) {
 	return "traceroute", []string{"-n", "-m", strconv.Itoa(o.MaxHops), "-w", strconv.Itoa(o.WaitSec), "-q", strconv.Itoa(o.Probes), destIP}
 }
 
-// enrich ergänzt Hostname und Standort eines beantworteten Hops.
+// enrich adds hostname and location to an answered hop.
 func (t *Tracer) enrich(ctx context.Context, raw rawHop) model.TraceHop {
 	hop := model.TraceHop{HopNumber: raw.Number, Responded: raw.IP != ""}
 	if !hop.Responded {
@@ -199,9 +198,8 @@ func nonEmpty(s string) *string {
 	return &s
 }
 
-// resolveIPv4 liefert die IPv4-Adresse von host. Die Verfolgung läuft auf die
-// Adresse, damit tracert/traceroute dasselbe Ziel nutzen wie der Vergleich
-// "Ziel erreicht".
+// resolveIPv4 returns host's IPv4 address. Tracing the address keeps the tool's
+// target identical to the one used for the "target reached" check.
 func resolveIPv4(ctx context.Context, host string) (string, error) {
 	if ip := net.ParseIP(host); ip != nil {
 		if v4 := ip.To4(); v4 != nil {
@@ -216,8 +214,8 @@ func resolveIPv4(ctx context.Context, host string) (string, error) {
 	return ips[0].String(), nil
 }
 
-// sourceIP ermittelt die lokale Adresse, über die destIP erreicht wird.
-// Ein UDP-"Connect" sendet dabei keine Pakete.
+// sourceIP returns the local address used to reach destIP; a UDP "connect"
+// sends no packets.
 func sourceIP(destIP string) string {
 	conn, err := net.Dial("udp4", net.JoinHostPort(destIP, "80"))
 	if err != nil {

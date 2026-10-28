@@ -1,11 +1,10 @@
 package main
 
-// reference.go – Referenz für die Produktdokumentation auf www.wedigo.net/docs/i-tracker.
+// reference.go – reference for the product docs at www.wedigo.net/docs/i-tracker.
 //
-// "i-tracker reference" gibt Konfigurationsschlüssel, Kommandozeile und API-Routen als
-// JSON aus. Die Datei docs/handbook/reference.json ist genau diese Ausgabe; der Generator
-// der Website baut daraus die Tabellen, die Erklärungen stehen in docs/handbook/{de,en}.md.
-// Die Tests in reference_test.go halten alle drei auf demselben Stand.
+// "i-tracker reference" prints config keys, CLI and API routes as JSON; that output is
+// docs/handbook/reference.json, from which the website builds its tables (explanations:
+// docs/handbook/{de,en}.md). reference_test.go keeps all three in sync.
 
 import (
 	"encoding/json"
@@ -16,7 +15,7 @@ import (
 	"i-tracker/internal/web"
 )
 
-// cliEntry ist eine Option oder ein Unterbefehl der Kommandozeile.
+// cliEntry is a CLI flag or subcommand.
 type cliEntry struct {
 	Name    string `json:"name"`
 	Default string `json:"default,omitempty"`
@@ -42,7 +41,7 @@ func buildReference() reference {
 	return ref
 }
 
-// marshalReference liefert die Referenz als eingerücktes JSON mit LF am Ende.
+// marshalReference returns the reference as indented JSON ending in LF.
 func marshalReference() ([]byte, error) {
 	data, err := json.MarshalIndent(buildReference(), "", "  ")
 	if err != nil {

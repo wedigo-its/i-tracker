@@ -10,7 +10,7 @@ import (
 	"i-tracker/internal/i18n"
 )
 
-// Paketmanager in der Reihenfolge, in der sie unter Linux gesucht werden.
+// Linux package managers in lookup order.
 var linuxPackageManagers = []struct {
 	tool string
 	cmds [][]string
@@ -23,10 +23,8 @@ var linuxPackageManagers = []struct {
 	{"pacman", [][]string{{"pacman", "-S", "--noconfirm", "iperf3"}}},
 }
 
-// installCommands liefert die Befehle, mit denen iperf3 auf goos installiert
-// wird. lookPath sucht Werkzeuge, isRoot gibt an, ob Root-Rechte bestehen.
-// Ohne Root wird unter Linux sudo im nicht-interaktiven Modus (-n) genutzt:
-// verlangt sudo ein Passwort, schlägt die Installation fehl statt zu hängen.
+// installCommands returns the commands that install iperf3 on goos. Without
+// root, Linux uses sudo -n so a password prompt fails instead of hanging.
 func installCommands(goos string, lookPath func(string) (string, error), isRoot bool) ([][]string, error) {
 	has := func(tool string) bool { _, err := lookPath(tool); return err == nil }
 	switch goos {
@@ -63,8 +61,8 @@ func installCommands(goos string, lookPath func(string) (string, error), isRoot 
 	return nil, i18n.E("err.install.unsupported_os", goos)
 }
 
-// Install installiert iperf3 über den Paketmanager des Systems (Windows:
-// winget, Linux: apt-get/dnf/yum/zypper/apk/pacman, macOS: brew).
+// Install installs iperf3 via the system package manager (winget, brew, or a
+// Linux package manager).
 func Install(ctx context.Context) error {
 	cmds, err := installPlan()
 	if err != nil {
@@ -82,7 +80,7 @@ func Install(ctx context.Context) error {
 	return nil
 }
 
-// lastLines liefert die letzten n nicht leeren Zeilen einer Ausgabe.
+// lastLines returns the last n non-empty lines of s.
 func lastLines(s string, n int) string {
 	var lines []string
 	for _, l := range strings.Split(strings.ReplaceAll(s, "\r", "\n"), "\n") {

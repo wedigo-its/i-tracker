@@ -25,22 +25,22 @@ func scanUser(row rowScanner) (*model.User, error) {
 	return &u, nil
 }
 
-// UserByID lädt einen Benutzer anhand seiner ID.
+// UserByID loads a user by ID.
 func (s *Store) UserByID(ctx context.Context, id int64) (*model.User, error) {
 	return scanUser(s.db.QueryRowContext(noCancel(ctx), `SELECT `+userColumns+` FROM users WHERE id = ?`, id))
 }
 
-// UserByUsername lädt einen Benutzer anhand seines Benutzernamens.
+// UserByUsername loads a user by username.
 func (s *Store) UserByUsername(ctx context.Context, username string) (*model.User, error) {
 	return scanUser(s.db.QueryRowContext(noCancel(ctx), `SELECT `+userColumns+` FROM users WHERE username = ?`, username))
 }
 
-// UserByEmail lädt einen Benutzer anhand seiner E-Mail-Adresse.
+// UserByEmail loads a user by email address.
 func (s *Store) UserByEmail(ctx context.Context, email string) (*model.User, error) {
 	return scanUser(s.db.QueryRowContext(noCancel(ctx), `SELECT `+userColumns+` FROM users WHERE email = ?`, email))
 }
 
-// ListUsers liefert alle Benutzer, sortiert nach ID.
+// ListUsers returns all users, ordered by ID.
 func (s *Store) ListUsers(ctx context.Context) ([]model.User, error) {
 	rows, err := s.db.QueryContext(noCancel(ctx), `SELECT `+userColumns+` FROM users ORDER BY id`)
 	if err != nil {
@@ -59,14 +59,14 @@ func (s *Store) ListUsers(ctx context.Context) ([]model.User, error) {
 	return users, rows.Err()
 }
 
-// CountUsers liefert die Anzahl der Benutzer.
+// CountUsers returns the number of users.
 func (s *Store) CountUsers(ctx context.Context) (int, error) {
 	var n int
 	err := s.db.QueryRowContext(noCancel(ctx), `SELECT COUNT(*) FROM users`).Scan(&n)
 	return n, err
 }
 
-// CreateUser speichert u und setzt ID und CreatedAt.
+// CreateUser stores u and sets ID and CreatedAt.
 func (s *Store) CreateUser(ctx context.Context, u *model.User) error {
 	u.CreatedAt = db.Now()
 	res, err := s.db.ExecContext(noCancel(ctx),
@@ -80,39 +80,37 @@ func (s *Store) CreateUser(ctx context.Context, u *model.User) error {
 	return err
 }
 
-// DeleteUser löscht den Benutzer mit der angegebenen ID.
+// DeleteUser deletes the user with the given ID.
 func (s *Store) DeleteUser(ctx context.Context, id int64) error {
 	return affectedOne(s.db.ExecContext(noCancel(ctx), `DELETE FROM users WHERE id = ?`, id))
 }
 
-// SetLastLogin setzt den Zeitpunkt der letzten Anmeldung.
+// SetLastLogin sets the last sign-in time.
 func (s *Store) SetLastLogin(ctx context.Context, id int64, t time.Time) error {
 	_, err := s.db.ExecContext(noCancel(ctx), `UPDATE users SET last_login = ? WHERE id = ?`, db.FormatTime(t), id)
 	return err
 }
 
-// SetPassword ersetzt den Passwort-Hash eines Benutzers.
+// SetPassword replaces a user's password hash.
 func (s *Store) SetPassword(ctx context.Context, id int64, hash string) error {
 	return affectedOne(s.db.ExecContext(noCancel(ctx), `UPDATE users SET hashed_password = ? WHERE id = ?`, hash, id))
 }
 
-// ChangePassword setzt ein neues Passwort, hebt einen erzwungenen
-// Passwortwechsel auf und erhöht die Token-Version, sodass alle bisherigen
-// Sitzungen des Benutzers enden. Geliefert wird die neue Token-Version.
+// ChangePassword sets a new password, clears the forced change and bumps the token version
+// (ending all sessions); returns the new version.
 func (s *Store) ChangePassword(ctx context.Context, id int64, hash string) (int64, error) {
 	return scanVersion(s.db.QueryRowContext(noCancel(ctx),
 		`UPDATE users SET hashed_password = ?, must_change_password = 0, token_version = token_version + 1
 		 WHERE id = ? RETURNING token_version`, hash, id))
 }
 
-// BumpTokenVersion erhöht die Token-Version und beendet damit alle Sitzungen
-// des Benutzers. Geliefert wird die neue Token-Version.
+// BumpTokenVersion ends all of the user's sessions; returns the new token version.
 func (s *Store) BumpTokenVersion(ctx context.Context, id int64) (int64, error) {
 	return scanVersion(s.db.QueryRowContext(noCancel(ctx),
 		`UPDATE users SET token_version = token_version + 1 WHERE id = ? RETURNING token_version`, id))
 }
 
-// scanVersion liest die per RETURNING gelieferte Token-Version.
+// scanVersion reads the token version from RETURNING.
 func scanVersion(row *sql.Row) (int64, error) {
 	var v int64
 	if err := row.Scan(&v); errors.Is(err, sql.ErrNoRows) {
@@ -123,7 +121,7 @@ func scanVersion(row *sql.Row) (int64, error) {
 	return v, nil
 }
 
-// SetMustChangePassword erzwingt (oder erlässt) den Passwortwechsel bei der nächsten Anmeldung.
+// SetMustChangePassword sets or clears the forced password change at next sign-in.
 func (s *Store) SetMustChangePassword(ctx context.Context, id int64, must bool) error {
 	return affectedOne(s.db.ExecContext(noCancel(ctx), `UPDATE users SET must_change_password = ? WHERE id = ?`, must, id))
 }

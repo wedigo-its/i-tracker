@@ -18,16 +18,16 @@ func TestAuthFlow(t *testing.T) {
 	var me map[string]any
 	if code := call(t, srv, "GET", "/api/auth/me", admin, "", &me); code != http.StatusOK ||
 		me["username"] != "admin" || me["is_admin"] != true || me["last_login"] == nil {
-		t.Fatalf("/me: Status %d, %v", code, me)
+		t.Fatalf("/me: status %d, %v", code, me)
 	}
 	if _, ok := me["token_version"]; ok {
-		t.Errorf("/me verrät die Token-Version: %v", me)
+		t.Errorf("/me leaks the token version: %v", me)
 	}
 
 	var bob map[string]any
 	if code := call(t, srv, "POST", "/api/auth/register", admin, `{"username":"bob","email":"bob@example.org","password":"geheimPasswort1"}`, &bob); code != http.StatusOK ||
 		bob["is_admin"] != false || bob["last_login"] != nil {
-		t.Fatalf("register: Status %d, %v", code, bob)
+		t.Fatalf("register: status %d, %v", code, bob)
 	}
 	expectStatus(t, srv, "POST", "/api/auth/register", admin, `{"username":"bob","email":"x@example.org","password":"geheimPasswort1"}`, http.StatusBadRequest)
 	expectStatus(t, srv, "POST", "/api/auth/register", admin, `{"username":"al","email":"al@example.org","password":"geheimPasswort1"}`, http.StatusUnprocessableEntity)
@@ -37,7 +37,7 @@ func TestAuthFlow(t *testing.T) {
 
 	var users []map[string]any
 	if code := call(t, srv, "GET", "/api/auth/users", admin, "", &users); code != http.StatusOK || len(users) != 2 {
-		t.Fatalf("Benutzerliste: Status %d, %d Einträge", code, len(users))
+		t.Fatalf("user list: status %d, %d entries", code, len(users))
 	}
 
 	expectStatus(t, srv, "DELETE", "/api/auth/users/1", admin, "", http.StatusBadRequest)
@@ -46,8 +46,7 @@ func TestAuthFlow(t *testing.T) {
 	expectStatus(t, srv, "GET", "/api/auth/me", user, "", http.StatusUnauthorized)
 }
 
-// TestInitAdminRemoved: Den ersten Admin legt EnsureAdmin beim Start an; der
-// frühere öffentliche Endpunkt existiert nicht mehr.
+// TestInitAdminRemoved: EnsureAdmin creates the first admin at startup; the old public endpoint is gone.
 func TestInitAdminRemoved(t *testing.T) {
 	srv, _ := newServerWithStore(t)
 	expectStatus(t, srv, "POST", "/api/auth/init-admin", "", "", http.StatusNotFound)
@@ -62,9 +61,8 @@ func TestForeignTokenRejected(t *testing.T) {
 	expectStatus(t, srv, "GET", "/api/auth/me", foreign, "", http.StatusUnauthorized)
 }
 
-// TestPasswordMinLength: Neue Passwörter brauchen mindestens 8 Zeichen
-// (Zeichen, nicht Byte; bis 2026-10-21 zehn); bestehende Passwörter bleiben
-// gültig.
+// TestPasswordMinLength: new passwords need 8 characters (not bytes; ten until
+// 2026-10-21); existing passwords stay valid.
 func TestPasswordMinLength(t *testing.T) {
 	srv := newTestServer(t)
 	admin := login(t, srv, "admin", "admin123")
@@ -72,10 +70,10 @@ func TestPasswordMinLength(t *testing.T) {
 	var out map[string]any
 	if code := call(t, srv, "POST", "/api/auth/register", admin, `{"username":"sieben","email":"s@example.org","password":"1234567"}`, &out); code != http.StatusUnprocessableEntity ||
 		out["detail"] != "Passwort muss mindestens 8 Zeichen lang sein" {
-		t.Errorf("7 Zeichen: Status %d, %v", code, out)
+		t.Errorf("7 chars: status %d, %v", code, out)
 	}
 	expectStatus(t, srv, "POST", "/api/auth/register", admin, `{"username":"acht","email":"a@example.org","password":"12345678"}`, http.StatusOK)
-	// 8 Zeichen mit Umlauten sind mehr als 8 Byte, aber gültig; 7 Umlaute nicht.
+	// 8 umlauts exceed 8 bytes but are valid; 7 are not.
 	expectStatus(t, srv, "POST", "/api/auth/register", admin, `{"username":"umlaut7","email":"u7@example.org","password":"äöüäöüä"}`, http.StatusUnprocessableEntity)
 	expectStatus(t, srv, "POST", "/api/auth/register", admin, `{"username":"umlaut8","email":"u8@example.org","password":"äöüäöüäö"}`, http.StatusOK)
 
@@ -84,9 +82,8 @@ func TestPasswordMinLength(t *testing.T) {
 	expectStatus(t, srv, "POST", "/api/auth/change-password", admin, `{"current_password":"admin123","new_password":"12345678"}`, http.StatusOK)
 }
 
-// TestChangePasswordEndsOtherSessions: Nach dem Passwortwechsel gelten alle
-// bisherigen Tokens des Benutzers nicht mehr; die eigene Sitzung läuft mit
-// dem neuen Token aus der Antwort weiter. Andere Benutzer bleiben angemeldet.
+// TestChangePasswordEndsOtherSessions: old tokens of the user die, the new token
+// from the response works, other users stay signed in.
 func TestChangePasswordEndsOtherSessions(t *testing.T) {
 	srv := newTestServer(t)
 	tok := login(t, srv, "admin", "admin123")
@@ -97,7 +94,7 @@ func TestChangePasswordEndsOtherSessions(t *testing.T) {
 	expectStatus(t, srv, "POST", "/api/auth/change-password", "", `{}`, http.StatusUnauthorized)
 	expectStatus(t, srv, "POST", "/api/auth/change-password", tok, `{"current_password":"falsch","new_password":"neuesPasswort"}`, http.StatusBadRequest)
 	expectStatus(t, srv, "POST", "/api/auth/change-password", tok, `{"current_password":"admin123","new_password":"kurz"}`, http.StatusUnprocessableEntity)
-	// Fehlgeschlagene Versuche beenden keine Sitzung.
+	// Failed attempts end no session.
 	expectStatus(t, srv, "GET", "/api/auth/me", other, "", http.StatusOK)
 
 	var out map[string]any
@@ -106,7 +103,7 @@ func TestChangePasswordEndsOtherSessions(t *testing.T) {
 	}
 	fresh, _ := out["access_token"].(string)
 	if fresh == "" || fresh == tok || out["csrf_token"] == "" {
-		t.Fatalf("Antwort ohne neues Token: %v", out)
+		t.Fatalf("response without new token: %v", out)
 	}
 
 	expectStatus(t, srv, "GET", "/api/auth/me", tok, "", http.StatusUnauthorized)
@@ -118,8 +115,7 @@ func TestChangePasswordEndsOtherSessions(t *testing.T) {
 	login(t, srv, "admin", "neuesPasswort")
 }
 
-// TestLogoutRevokesBearer: Abmelden sperrt das Token auch für API-Clients,
-// andere Sitzungen desselben Benutzers bleiben bestehen.
+// TestLogoutRevokesBearer: logout revokes Bearer tokens too; the user's other sessions survive.
 func TestLogoutRevokesBearer(t *testing.T) {
 	srv := newTestServer(t)
 	tok := login(t, srv, "admin", "admin123")
@@ -129,12 +125,12 @@ func TestLogoutRevokesBearer(t *testing.T) {
 	expectStatus(t, srv, "GET", "/api/auth/me", tok, "", http.StatusUnauthorized)
 	expectStatus(t, srv, "GET", "/api/servers", tok, "", http.StatusUnauthorized)
 	expectStatus(t, srv, "GET", "/api/auth/me", other, "", http.StatusOK)
-	// Abmelden ohne oder mit ungültigem Token ist harmlos.
+	// Logout without or with an invalid token is harmless.
 	expectStatus(t, srv, "POST", "/api/auth/logout", "", "", http.StatusNoContent)
 	expectStatus(t, srv, "POST", "/api/auth/logout", "kein-token", "", http.StatusNoContent)
 }
 
-// TestLogoutAll beendet alle Sitzungen des Benutzers, nicht die anderer.
+// TestLogoutAll ends all of the user's sessions, not those of others.
 func TestLogoutAll(t *testing.T) {
 	srv := newTestServer(t)
 	tok := login(t, srv, "admin", "admin123")
@@ -147,13 +143,12 @@ func TestLogoutAll(t *testing.T) {
 	expectStatus(t, srv, "GET", "/api/auth/me", tok, "", http.StatusUnauthorized)
 	expectStatus(t, srv, "GET", "/api/auth/me", other, "", http.StatusUnauthorized)
 	expectStatus(t, srv, "GET", "/api/auth/me", bob, "", http.StatusOK)
-	// Neue Anmeldung funktioniert wieder.
+	// A new sign-in works again.
 	expectStatus(t, srv, "GET", "/api/auth/me", login(t, srv, "admin", "admin123"), "", http.StatusOK)
 }
 
-// TestLoginRateLimit: Nach 10 Fehlversuchen je Client-Adresse wird jede
-// Anmeldung mit 429 abgewiesen – auch mit richtigem Passwort und auch bei
-// gefälschtem X-Forwarded-For.
+// TestLoginRateLimit: after 10 failures per address every sign-in gets 429,
+// even with the right password or a spoofed X-Forwarded-For.
 func TestLoginRateLimit(t *testing.T) {
 	srv := newTestServer(t)
 	for i := 0; i < auth.LoginMaxFailures; i++ {
@@ -168,17 +163,16 @@ func TestLoginRateLimit(t *testing.T) {
 	}
 	resp.Body.Close()
 	if resp.StatusCode != http.StatusTooManyRequests || resp.Header.Get("Retry-After") == "" {
-		t.Fatalf("nach %d Fehlversuchen: Status %d, Retry-After %q", auth.LoginMaxFailures, resp.StatusCode, resp.Header.Get("Retry-After"))
+		t.Fatalf("after %d failures: status %d, Retry-After %q", auth.LoginMaxFailures, resp.StatusCode, resp.Header.Get("Retry-After"))
 	}
 	var out map[string]any
 	if code := call(t, srv, "POST", "/api/auth/login", "", `{"username":"unbekannt","password":"x"}`, &out); code != http.StatusTooManyRequests ||
 		out["detail"] != "Zu viele Fehlversuche – bitte später erneut versuchen" {
-		t.Errorf("gesperrt: Status %d, %v", code, out)
+		t.Errorf("blocked: status %d, %v", code, out)
 	}
 }
 
-// TestChangePasswordRateLimit: Ein falsches aktuelles Passwort zählt als
-// Fehlversuch; danach sind Passwortwechsel und Login gesperrt.
+// TestChangePasswordRateLimit: wrong current passwords count as failures and then block change and login.
 func TestChangePasswordRateLimit(t *testing.T) {
 	srv := newTestServer(t)
 	tok := login(t, srv, "admin", "admin123")
@@ -187,12 +181,11 @@ func TestChangePasswordRateLimit(t *testing.T) {
 	}
 	expectStatus(t, srv, "POST", "/api/auth/change-password", tok, `{"current_password":"admin123","new_password":"neuesPasswort"}`, http.StatusTooManyRequests)
 	expectStatus(t, srv, "POST", "/api/auth/login", "", `{"username":"admin","password":"admin123"}`, http.StatusTooManyRequests)
-	// Die bestehende Sitzung bleibt nutzbar.
+	// The existing session stays usable.
 	expectStatus(t, srv, "GET", "/api/auth/me", tok, "", http.StatusOK)
 }
 
-// TestLoginUnknownUserChecksHash: Auch für unbekannte Benutzer wird ein
-// Argon2id-Hash mit den aktuellen Parametern geprüft (gleiche Antwortzeit).
+// TestLoginUnknownUserChecksHash: unknown users still cost one current-parameter Argon2id check (equal timing).
 func TestLoginUnknownUserChecksHash(t *testing.T) {
 	srv := newTestServer(t)
 	var checked []string
@@ -206,12 +199,12 @@ func TestLoginUnknownUserChecksHash(t *testing.T) {
 	expectStatus(t, srv, "POST", "/api/auth/login", "", `{"username":"niemand","password":"admin123"}`, http.StatusUnauthorized)
 	if len(checked) != 1 || checked[0] != auth.DummyHash() ||
 		!strings.HasPrefix(checked[0], "$argon2id$") || auth.NeedsRehash(checked[0]) {
-		t.Fatalf("unbekannter Benutzer: geprüfte Hashes %q", checked)
+		t.Fatalf("unknown user: checked hashes %q", checked)
 	}
-	// Gegenprobe: vorhandener Benutzer, falsches Passwort – genau ein Vergleich mit seinem Hash.
+	// Cross-check: existing user, wrong password: exactly one check against its hash.
 	checked = nil
 	expectStatus(t, srv, "POST", "/api/auth/login", "", `{"username":"admin","password":"falsch"}`, http.StatusUnauthorized)
 	if len(checked) != 1 || checked[0] == auth.DummyHash() || !strings.HasPrefix(checked[0], "$argon2id$") {
-		t.Fatalf("vorhandener Benutzer: geprüfte Hashes %q", checked)
+		t.Fatalf("existing user: checked hashes %q", checked)
 	}
 }

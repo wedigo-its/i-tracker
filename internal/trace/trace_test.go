@@ -40,43 +40,43 @@ func rtt(h rawHop) float64 {
 }
 
 func TestParseTracertWindows(t *testing.T) {
-	// Echte Ausgabe von `tracert -d` auf deutschem Windows (Codepage 850).
+	// Real `tracert -d` output from German Windows (code page 850).
 	hops := parseFixture(t, "tracert_windows_de.txt")
 	if len(hops) != 10 {
-		t.Fatalf("%d Hops, erwartet 10", len(hops))
+		t.Fatalf("%d hops, want 10", len(hops))
 	}
 	if hops[0].IP != "10.10.80.1" || rtt(hops[0]) != 1 {
-		t.Errorf("Hop 1 (<1 ms): %+v rtt=%v", hops[0], rtt(hops[0]))
+		t.Errorf("hop 1 (<1 ms): %+v rtt=%v", hops[0], rtt(hops[0]))
 	}
 	if hops[1].Number != 2 || hops[1].IP != "" || hops[1].RTTMs != nil {
-		t.Errorf("Hop 2 (Timeout): %+v", hops[1])
+		t.Errorf("hop 2 (timeout): %+v", hops[1])
 	}
 	if hops[4].IP != "188.111.129.216" || rtt(hops[4]) != 2.33 {
-		t.Errorf("Hop 5: %+v rtt=%v", hops[4], rtt(hops[4]))
+		t.Errorf("hop 5: %+v rtt=%v", hops[4], rtt(hops[4]))
 	}
 	if last := hops[9]; last.Number != 10 || last.IP != "8.8.8.8" {
-		t.Errorf("letzter Hop: %+v", last)
+		t.Errorf("last hop: %+v", last)
 	}
 }
 
 func TestParseTracerouteLinux(t *testing.T) {
 	hops := parseFixture(t, "traceroute_linux.txt")
 	if len(hops) != 6 {
-		t.Fatalf("%d Hops, erwartet 6", len(hops))
+		t.Fatalf("%d hops, want 6", len(hops))
 	}
 	if hops[0].IP != "10.10.80.1" || rtt(hops[0]) != 0.39 {
-		t.Errorf("Hop 1: %+v rtt=%v", hops[0], rtt(hops[0]))
+		t.Errorf("hop 1: %+v rtt=%v", hops[0], rtt(hops[0]))
 	}
 	if hops[1].IP != "" {
-		t.Errorf("Hop 2 (* * *): %+v", hops[1])
+		t.Errorf("hop 2 (* * *): %+v", hops[1])
 	}
-	// Teilweiser Timeout zählt als beantwortet.
+	// A partial timeout counts as answered.
 	if hops[2].IP != "92.79.253.252" || rtt(hops[2]) != 2.21 {
-		t.Errorf("Hop 3 (teilweiser Timeout): %+v rtt=%v", hops[2], rtt(hops[2]))
+		t.Errorf("hop 3 (partial timeout): %+v rtt=%v", hops[2], rtt(hops[2]))
 	}
-	// Mehrere Adressen (Load Balancing): die erste zählt, RTT über alle Proben.
+	// Load balancing: first address wins, RTT over all probes.
 	if hops[3].IP != "88.79.26.24" || rtt(hops[3]) != 2.6 {
-		t.Errorf("Hop 4 (zwei Adressen): %+v rtt=%v", hops[3], rtt(hops[3]))
+		t.Errorf("hop 4 (two addresses): %+v rtt=%v", hops[3], rtt(hops[3]))
 	}
 }
 
@@ -95,11 +95,11 @@ func hop(n int, ip string, lat, lon *float64, city string) model.TraceHop {
 
 func TestInterpolate(t *testing.T) {
 	hops := []model.TraceHop{
-		hop(1, "10.0.0.1", nil, nil, ""),                     // privat, kein Spender in /24 → nächster Hop
-		hop(2, "80.1.1.1", ptr(50.0), ptr(8.0), "Frankfurt"), // Spender
-		hop(3, "", nil, nil, ""),                             // Timeout: bleibt leer
+		hop(1, "10.0.0.1", nil, nil, ""),                     // private, no /24 donor: nearest hop
+		hop(2, "80.1.1.1", ptr(50.0), ptr(8.0), "Frankfurt"), // donor
+		hop(3, "", nil, nil, ""),                             // timeout: stays empty
 		hop(4, "90.2.2.2", ptr(52.0), ptr(13.0), "Berlin"),
-		hop(5, "80.1.1.9", nil, nil, ""), // gleiches /24 wie Hop 2 → Frankfurt, obwohl Hop 4 näher ist
+		hop(5, "80.1.1.9", nil, nil, ""), // same /24 as hop 2: Frankfurt, though hop 4 is closer
 	}
 	Interpolate(hops, rand.New(rand.NewPCG(1, 2)))
 
@@ -107,22 +107,22 @@ func TestInterpolate(t *testing.T) {
 		return h.HasLocation() && abs(*h.Latitude-lat) <= jitterDegrees && abs(*h.Longitude-lon) <= jitterDegrees
 	}
 	if !hops[0].GeoIPInterpolated || !near(hops[0], 50, 8) || *hops[0].City != "? Frankfurt" {
-		t.Errorf("Hop 1: %+v", hops[0])
+		t.Errorf("hop 1: %+v", hops[0])
 	}
 	if hops[2].HasLocation() || hops[2].GeoIPInterpolated {
-		t.Errorf("Timeout-Hop darf nicht interpoliert werden: %+v", hops[2])
+		t.Errorf("timeout hop must not be interpolated: %+v", hops[2])
 	}
 	if !hops[4].GeoIPInterpolated || !near(hops[4], 50, 8) {
-		t.Errorf("Hop 5 sollte vom /24-Nachbarn (Frankfurt) übernehmen: lat=%v lon=%v", *hops[4].Latitude, *hops[4].Longitude)
+		t.Errorf("hop 5 should copy its /24 neighbor (Frankfurt): lat=%v lon=%v", *hops[4].Latitude, *hops[4].Longitude)
 	}
 	if hops[1].GeoIPInterpolated || *hops[1].Latitude != 50 {
-		t.Errorf("Spender darf nicht verändert werden: %+v", hops[1])
+		t.Errorf("donor must not change: %+v", hops[1])
 	}
 
 	none := []model.TraceHop{hop(1, "10.0.0.1", nil, nil, "")}
 	Interpolate(none, rand.New(rand.NewPCG(1, 2)))
 	if none[0].HasLocation() {
-		t.Error("ohne Spender dürfen keine Koordinaten entstehen")
+		t.Error("no donor must yield no coordinates")
 	}
 }
 
@@ -133,8 +133,8 @@ func abs(v float64) float64 {
 	return v
 }
 
-// TestHelperProcess ersetzt tracert/traceroute: Die Test-Binary gibt das
-// Fixture aus TRACE_HELPER_FIXTURE zeilenweise mit Verzögerung aus.
+// TestHelperProcess stands in for tracert/traceroute: it prints the
+// TRACE_HELPER_FIXTURE file line by line with a delay.
 func TestHelperProcess(t *testing.T) {
 	fixture := os.Getenv("TRACE_HELPER_FIXTURE")
 	if fixture == "" {
@@ -160,7 +160,7 @@ func newHelperTracer(t *testing.T, fixture string) *Tracer {
 		if ip == "8.8.8.8" {
 			return []string{"dns.google."}, nil
 		}
-		return nil, errors.New("kein PTR")
+		return nil, errors.New("no PTR")
 	}
 	return tr
 }
@@ -171,49 +171,49 @@ func TestTracerRun(t *testing.T) {
 	res := tr.Run(context.Background(), "8.8.8.8", DefaultOptions(), func(h model.TraceHop) { live = append(live, h.HopNumber) })
 
 	if !res.Completed || res.ErrorMessage != nil {
-		t.Fatalf("nicht vollständig: %v", *res.ErrorMessage)
+		t.Fatalf("not completed: %v", *res.ErrorMessage)
 	}
-	// Der Trace endet am Ziel (Hop 5); die Zeile danach wird nicht mehr gelesen.
+	// The trace stops at the target (hop 5); the line after it is not read.
 	if res.TotalHops != 5 || len(res.Hops) != 5 || len(live) != 5 {
-		t.Fatalf("Hops: total=%d, gespeichert=%d, live=%d", res.TotalHops, len(res.Hops), len(live))
+		t.Fatalf("hops: total=%d, stored=%d, live=%d", res.TotalHops, len(res.Hops), len(live))
 	}
 	last := res.Hops[4]
 	if last.Hostname == nil || *last.Hostname != "dns.google" || !last.Responded {
-		t.Errorf("Ziel-Hop: %+v", last)
+		t.Errorf("target hop: %+v", last)
 	}
 	if res.Hops[1].Responded || res.Hops[1].IPAddress != nil {
-		t.Errorf("Timeout-Hop: %+v", res.Hops[1])
+		t.Errorf("timeout hop: %+v", res.Hops[1])
 	}
 	if res.TotalRTTMs == nil || *res.TotalRTTMs != 4.54 {
-		t.Errorf("total_rtt_ms = %v, erwartet RTT des Ziels (4.54)", res.TotalRTTMs)
+		t.Errorf("total_rtt_ms = %v, want target RTT (4.54)", res.TotalRTTMs)
 	}
 	if res.DestinationIP == nil || *res.DestinationIP != "8.8.8.8" || res.StartedAt == nil || res.CompletedAt == nil {
-		t.Errorf("Metadaten: %+v", res)
+		t.Errorf("metadata: %+v", res)
 	}
 }
 
 func TestTracerMissingCommand(t *testing.T) {
-	tr := NewTracer(nil, filepath.Join(t.TempDir(), "kein-traceroute"))
+	tr := NewTracer(nil, filepath.Join(t.TempDir(), "no-traceroute"))
 	res := tr.Run(context.Background(), "127.0.0.1", DefaultOptions(), nil)
 	if res.Completed || res.ErrorMessage == nil || !strings.Contains(*res.ErrorMessage, "not found") {
-		t.Errorf("Fehler erwartet: %+v", res)
+		t.Errorf("want error: %+v", res)
 	}
 }
 
 func TestGeoIPLookup(t *testing.T) {
 	var none *GeoIP
 	if none.Lookup("8.8.8.8") != nil {
-		t.Error("nil-GeoIP muss nil liefern")
+		t.Error("nil GeoIP must return nil")
 	}
 	if NewGeoIP().Lookup("8.8.8.8") != nil || NewGeoIP().Info().Source != "" {
-		t.Error("leere GeoIP muss nil und keine Quelle liefern")
+		t.Error("empty GeoIP must return nil and no source")
 	}
 
-	// Nutzt eine lokal abgelegte Datenbank (nicht im Repository), sofern vorhanden.
+	// Uses a local database (not in the repo) if present.
 	dir := filepath.Join("..", "..", "geoip")
 	geo, _, err := OpenGeoIP(filepath.Join(dir, "city.mmdb"), filepath.Join(dir, "GeoLite2-City.mmdb"))
 	if err != nil {
-		t.Skip("keine GeoIP-Datenbank unter geoip/ vorhanden")
+		t.Skip("no GeoIP database in geoip/")
 	}
 	defer geo.Close()
 	if info := geo.Info(); info.Source == "" || info.BuildDate == "" {
@@ -224,6 +224,6 @@ func TestGeoIPLookup(t *testing.T) {
 		t.Errorf("8.8.8.8: %+v", loc)
 	}
 	if loc := geo.Lookup("10.10.80.1"); loc != nil {
-		t.Errorf("private Adresse darf keinen Standort haben: %+v", loc)
+		t.Errorf("private address must have no location: %+v", loc)
 	}
 }
