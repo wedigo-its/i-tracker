@@ -498,6 +498,19 @@ func TestNewer(t *testing.T) {
 		{"2.0.0", "1.99.99", true},
 		{"v1.2.4", "1.2.3", true},
 		{"1.2.3.1", "1.2.3", true},
+		// Build numbers: a later build of the same release is newer, also for
+		// a binary from before build numbers; a new release beats any build.
+		{"v1.0.0.12", "v1.0.0", true},
+		{"v1.0.0.13", "v1.0.0.12", true},
+		{"v1.0.0.12", "v1.0.0.13", false},
+		{"v1.0.0.12", "v1.0.0.12", false},
+		{"v1.0.0", "v1.0.0.12", false},
+		{"v1.0.1", "v1.0.0.12", true},
+		// The commit after "+" is metadata; only the build number orders.
+		{"v1.0.0.13+0b1c2d3", "v1.0.0", true},
+		{"v1.0.0.13+0b1c2d3", "v1.0.0.12+a1b2c3d", true},
+		{"v1.0.0.12+a1b2c3d", "v1.0.0.13+0b1c2d3", false},
+		{"v1.0.0.13+0b1c2d3", "v1.0.0.13+0b1c2d3", false},
 		{"1.0.0", "0.0.0-dev", true}, // development builds see every release
 		{"1.2.3", "1.2.3", false},
 		{"v1.2.3", "1.2.3", false},

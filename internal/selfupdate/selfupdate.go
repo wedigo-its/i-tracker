@@ -341,13 +341,19 @@ func (u *Updater) get(ctx context.Context, url string) ([]byte, error) {
 	return io.ReadAll(io.LimitReader(resp.Body, 128<<20))
 }
 
-// IsRelease reports whether v is a clean release version such as "1.4.2" or
-// "v1.4.2". Development builds ("dev", a commit hash, "1.4.2-3-gabc1234",
-// "-dirty") are not, and are never replaced automatically. The dot rules out
-// a short commit hash that happens to be all digits.
+// IsRelease reports whether v is a clean release version such as "1.4.2",
+// "v1.4.2" or a build of it, "v1.4.2.140+aae9b4f" (build number, then the
+// commit as build metadata; build.cmd). Development builds ("dev", a commit
+// hash, "1.4.2-3-gabc1234", "-dirty", other metadata) are not, and are never
+// replaced automatically. The dot rules out a short commit hash that happens
+// to be all digits.
 func IsRelease(v string) bool {
 	v = strings.TrimSpace(v)
-	return parseVersion(v) != nil && strings.Contains(v, ".") && !strings.ContainsAny(v, "-+")
+	core, commit, hasCommit := strings.Cut(v, "+")
+	if hasCommit && (commit == "" || strings.Trim(commit, "0123456789abcdef") != "") {
+		return false
+	}
+	return parseVersion(core) != nil && strings.Contains(core, ".") && !strings.Contains(core, "-")
 }
 
 // newer reports whether candidate is a strictly newer semantic-ish version than

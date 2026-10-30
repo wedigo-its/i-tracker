@@ -130,7 +130,10 @@ func build(o buildOptions, priv ed25519.PrivateKey) (string, error) {
 		if err := checkVersion(path, parts[0], parts[1], data, o.version); err != nil {
 			return "", err
 		}
-		rel := filepath.ToSlash(filepath.Join(o.version, parts[0]+"-"+parts[1], filepath.Base(path)))
+		// The folder leaves out the commit after "+" (v1.0.4.109): a "+" in a URL
+		// path is easily misread, and the build number alone names the build.
+		folder, _, _ := strings.Cut(o.version, "+")
+		rel := filepath.ToSlash(filepath.Join(folder, parts[0]+"-"+parts[1], filepath.Base(path)))
 		files = append(files, staged{filepath.Join(dir, filepath.FromSlash(rel)), data})
 		sum := sha256.Sum256(data)
 		m.Binaries[key] = selfupdate.Binary{URL: rel, SHA256: hex.EncodeToString(sum[:])}
@@ -179,10 +182,10 @@ func checkVersion(path, goos, goarch string, data []byte, version string) error 
 				return nil
 			}
 		}
-		return fmt.Errorf("%s reports %q, not version %s; rebuild it from the release tag", path, strings.TrimSpace(string(out)), version)
+		return fmt.Errorf("%s reports %q, not version %s; rebuild it with build.cmd from a clean checkout", path, strings.TrimSpace(string(out)), version)
 	}
 	if !bytes.Contains(data, []byte(version)) {
-		return fmt.Errorf("%s does not contain version %s; rebuild it from the release tag", path, version)
+		return fmt.Errorf("%s does not contain version %s; rebuild it with build.cmd from a clean checkout", path, version)
 	}
 	return nil
 }

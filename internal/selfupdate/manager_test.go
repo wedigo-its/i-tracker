@@ -18,6 +18,8 @@ func TestIsRelease(t *testing.T) {
 		"1.4.2": true, "v1.4.2": true, "2026.10": true,
 		"dev": false, "0.0.0-dev": false, "ba179fc": false, "1234567": false,
 		"1.4.2-3-gabc1234": false, "v1.4.2-dirty": false, "1..2": false, "": false,
+		"v1.0.0.12": true, "v1.0.0.12-dirty": false,
+		"v1.0.0.13+0b1c2d3": true, "v1.0.0.13+0b1c2d3-dirty": false, "v1.0.0.13+": false, "v1.0.0.13+build5x": false,
 	} {
 		if got := IsRelease(v); got != want {
 			t.Errorf("IsRelease(%q) = %v, want %v", v, got, want)

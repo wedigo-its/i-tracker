@@ -64,7 +64,8 @@ func readSigned(t *testing.T, dir string, pub ed25519.PublicKey) (selfupdate.Man
 // Every version, 0.x included, lands in the feed root without channel fields.
 func TestBuildWritesIntoFeedRoot(t *testing.T) {
 	pub, priv := newKey(t)
-	for _, version := range []string{"v0.0.1", "v1.2.3", "v2.0.0"} {
+	// The commit after "+" stays out of the folder and the URL.
+	for _, version := range []string{"v0.0.1", "v1.2.3", "v2.0.0", "v1.0.0.13+0b1c2d3"} {
 		t.Run(version, func(t *testing.T) {
 			out := t.TempDir()
 			dir, err := build(buildOptions{version: version, notes: "n", out: out, bins: []string{foreignPlatform + "=" + fakeBinary(t, version)}}, priv)
@@ -82,7 +83,8 @@ func TestBuildWritesIntoFeedRoot(t *testing.T) {
 				t.Errorf("manifest has channel fields: %s", raw)
 			}
 			bin := m.Binaries[foreignPlatform]
-			if want := version + "/plan9-386/i-tracker"; bin.URL != want {
+			folder, _, _ := strings.Cut(version, "+")
+			if want := folder + "/plan9-386/i-tracker"; bin.URL != want {
 				t.Errorf("binary URL = %q, want %q relative to the feed root", bin.URL, want)
 			}
 			if _, err := os.Stat(filepath.Join(dir, filepath.FromSlash(bin.URL))); err != nil {

@@ -63,6 +63,13 @@ function esc(s) {
   return String(s == null ? '' : s).replace(/[&<>"']/g, c =>
     ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 }
+// showVersion is a version as the interface shows it: the release with the
+// commit after a hyphen ("v1.0.0.13+0b1c2d3" reads "v1.0.0-0b1c2d3"), without a
+// commit the build number; the server compares the version as built.
+function showVersion(v) {
+  const m = /^(v?\d+\.\d+\.\d+)\.(\d+)(?:\+(\S+))?(-\S*)?$/.exec(String(v == null ? '' : v));
+  return m ? m[1] + '-' + (m[3] || m[2]) + (m[4] || '') : v;
+}
 function fmt(n, digits = 2) {
   return n == null ? '–' : Number(n).toLocaleString(locale(), { maximumFractionDigits: digits });
 }
@@ -533,7 +540,7 @@ function mapConfig() {
 async function loadInfo() {
   try {
     const info = await fetch('/api/info').then(r => r.json());
-    document.getElementById('appVersion').textContent = info.version || '';
+    document.getElementById('appVersion').textContent = showVersion(info.version) || '';
     document.getElementById('buildDate').textContent = info.build_date || '–';
   } catch (e) {}
 }
@@ -2127,8 +2134,8 @@ const adminPage = {
     let mode = t('update.mode.' + (st.enabled ? st.mode : 'off'));
     if (st.enabled && st.window) mode = t('update.modeWindow', { mode, window: st.window });
     document.getElementById('updStats').innerHTML =
-      row(t('update.current'), st.current || '–') +
-      row(t('update.latest'), st.latest || '–') +
+      row(t('update.current'), showVersion(st.current) || '–') +
+      row(t('update.latest'), showVersion(st.latest) || '–') +
       row(t('update.modeLabel'), mode) +
       row(t('update.checked'), st.checked ? fmtDate(st.checked) : t('update.never'));
 
@@ -2143,7 +2150,7 @@ const adminPage = {
     let note = '';
     if (st.container) note = esc(t('update.blocked.container'));
     else if (!st.enabled) note = esc(t('update.offNote'));
-    else if (st.installed) note = esc(t(st.restarting ? 'update.restarting' : 'update.restartManually', { v: st.installed }));
+    else if (st.installed) note = esc(t(st.restarting ? 'update.restarting' : 'update.restartManually', { v: showVersion(st.installed) }));
     else if (st.blocked && st.mode === 'auto') note = esc(t('update.blocked.' + st.blocked));
     if (!st.installed && st.available && st.notes) {
       const notes = /^https:\/\//.test(st.notes)
@@ -2171,7 +2178,7 @@ const adminPage = {
     try {
       this.update = await api('POST', '/update/check');
       this.renderUpdate();
-      if (!this.update.error) notify(t(this.update.available ? 'update.found' : 'update.none', { v: this.update.latest }));
+      if (!this.update.error) notify(t(this.update.available ? 'update.found' : 'update.none', { v: showVersion(this.update.latest) }));
     } catch (e) {
       notify(e.message, 'err');
     } finally {
@@ -2182,7 +2189,7 @@ const adminPage = {
   async installUpdate() {
     const st = this.update;
     if (!st || !st.available) return;
-    if (!await confirmDialog(t('update.installQ'), t('update.installText', { from: st.current, to: st.latest }), t('update.installBtn'), false)) return;
+    if (!await confirmDialog(t('update.installQ'), t('update.installText', { from: showVersion(st.current), to: showVersion(st.latest) }), t('update.installBtn'), false)) return;
     const btn = document.getElementById('updInstall');
     btn.disabled = true;
     try {
@@ -2190,7 +2197,7 @@ const adminPage = {
       this.renderUpdate();
       if (this.update.error) notify(t('update.failed', { msg: this.update.error }), 'err');
       else if (this.update.restarting) this.waitForRestart(this.update.current, this.update.installed);
-      else if (this.update.installed) notify(t('update.restartManually', { v: this.update.installed }), 'warn');
+      else if (this.update.installed) notify(t('update.restartManually', { v: showVersion(this.update.installed) }), 'warn');
     } catch (e) {
       notify(t('update.failed', { msg: e.message }), 'err');
     } finally {

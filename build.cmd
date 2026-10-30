@@ -13,8 +13,11 @@ setlocal
 ::                  into _release\linux-amd64 and _release\linux-arm64
 ::   Arguments can be combined; "linux" without "release" builds Linux only.
 ::
-:: The version comes from "git describe --tags --always --dirty" ("dev"
-:: without git); only a clean build of a tag updates itself.
+:: The version is the latest release tag, the build number (the count of
+:: commits up to HEAD) and the commit as build metadata (v1.0.0.13+0b1c2d3,
+:: shown as v1.0.0-0b1c2d3), "-dirty" with uncommitted changes, "dev" without
+:: git or tag; only a clean build updates itself, and a later build of the
+:: same release counts as newer.
 :: ------------------------------------------------------------
 
 cd /d "%~dp0"
@@ -70,7 +73,15 @@ if %DO_TIDY%==1 (
 :: ---------- Version and build date ----------
 :: Injected into internal/version (Version, BuildDate).
 set "VERSION="
-for /f "delims=" %%i in ('git describe --tags --always --dirty 2^>nul') do set "VERSION=%%i"
+set "TAG="
+set "BUILDNO="
+set "COMMIT="
+set "DIRTY="
+for /f "delims=" %%i in ('git describe --tags --abbrev^=0 --match "v[0-9]*" 2^>nul') do set "TAG=%%i"
+for /f "delims=" %%i in ('git rev-list --count HEAD 2^>nul') do set "BUILDNO=%%i"
+for /f "delims=" %%i in ('git rev-parse --short HEAD 2^>nul') do set "COMMIT=%%i"
+for /f "delims=" %%i in ('git status --porcelain 2^>nul') do set "DIRTY=-dirty"
+if defined TAG if defined BUILDNO if defined COMMIT set "VERSION=%TAG%.%BUILDNO%+%COMMIT%%DIRTY%"
 if "%VERSION%"=="" set "VERSION=dev"
 for /f "delims=" %%i in ('powershell -NoProfile -Command "Get-Date -Format \"yyyy-MM-dd HH:mm\""') do set "BUILD_DATE=%%i"
 echo [INFO ] Version: %VERSION%, build date: %BUILD_DATE%
