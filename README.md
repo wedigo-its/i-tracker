@@ -238,8 +238,9 @@ accepted for consistency with the other wedigo products but has no effect.
 
 i-Tracker updates itself from a signed release feed at
 `https://www.wedigo.net/update/i-tracker/` (`latest.json`, Ed25519 signature
-in `latest.json.sig` checked against the wedigo release key built into the
-binary, SHA-256 per binary). There is one channel for all versions, so moving
+in `latest.json.casig` by a certificate that must chain to the wedigo it solutions
+root built into the binary and must not be on the revocation list that comes
+with it, SHA-256 per binary). There is one channel for all versions, so moving
 from 0.x to 1.x is an ordinary update.
 
 - `update.mode: auto` (default) installs a new release and restarts the

@@ -36,11 +36,14 @@ import (
 	"time"
 
 	"i-tracker/internal/i18n"
+	"i-tracker/internal/updatesig"
 )
 
 // DefaultFeedURL is the release feed; no setting redirects it.
 const DefaultFeedURL = "https://www.wedigo.net/update/i-tracker"
 
+// releasePublicKeyB64 is the single release key of installations shipped before the CA. New binaries
+// do not verify with it (trust.go); the feed tool still signs latest.json.sig for those installations.
 // releasePublicKeyB64 is the wedigo release signing key, the same in every
 // wedigo product. It is separate from the license key, so a leak of one does
 // not compromise the other.
@@ -105,22 +108,22 @@ func startExecutable() (string, error) { return startExe, startExeErr }
 // Updater checks a feed and applies updates.
 type Updater struct {
 	feedURL string
-	pubKey  ed25519.PublicKey
+	trust   *updatesig.Trust
 	client  *http.Client
 }
 
-// New returns an Updater for the given feed base URL and verification key.
-func New(feedURL string, pubKey ed25519.PublicKey) *Updater {
+// New returns an Updater for the given feed base URL and root.
+func New(feedURL string, trust *updatesig.Trust) *Updater {
 	return &Updater{
 		feedURL: strings.TrimRight(feedURL, "/"),
-		pubKey:  pubKey,
+		trust:   trust,
 		client:  &http.Client{Timeout: 60 * time.Second},
 	}
 }
 
 // Enabled reports whether self-update is configured.
 func (u *Updater) Enabled() bool {
-	return u != nil && u.feedURL != "" && len(u.pubKey) == ed25519.PublicKeySize
+	return u != nil && u.feedURL != "" && u.trust != nil
 }
 
 // FeedURL returns the feed base URL.
@@ -150,16 +153,12 @@ func (u *Updater) Check(ctx context.Context, currentVersion string) (Release, er
 	if err != nil {
 		return Release{}, i18n.Wrap(err, "err.update.fetch_manifest")
 	}
-	sigBytes, err := u.get(ctx, channel+"/latest.json.sig")
+	sigBytes, err := u.get(ctx, channel+"/latest.json"+updatesig.BundleSuffix)
 	if err != nil {
 		return Release{}, i18n.Wrap(err, "err.update.fetch_signature")
 	}
-	sig, err := base64.StdEncoding.DecodeString(strings.TrimSpace(string(sigBytes)))
-	if err != nil {
-		return Release{}, i18n.Wrap(err, "err.update.decode_signature")
-	}
-	if !ed25519.Verify(u.pubKey, manifestBytes, sig) {
-		return Release{}, i18n.E("err.update.bad_signature")
+	if err := u.verifyManifest(manifestBytes, sigBytes); err != nil {
+		return Release{}, i18n.Wrap(err, "err.update.bad_signature")
 	}
 	var m Manifest
 	if err := json.Unmarshal(manifestBytes, &m); err != nil {

@@ -20,7 +20,7 @@ func TestChannelURLIsFeedRoot(t *testing.T) {
 			}
 		}
 	}
-	u := New(DefaultFeedURL, ReleasePublicKey())
+	u := New(DefaultFeedURL, Trust())
 	for _, current := range []string{"v0.0.1", "v1.2.3"} {
 		if got := u.ChannelURL(current); got != root {
 			t.Errorf("Updater.ChannelURL(%q) = %q, want %q", current, got, root)
@@ -35,7 +35,7 @@ func TestReleasePublicKeyEmbedded(t *testing.T) {
 	if len(ReleasePublicKey()) == 0 {
 		t.Fatal("the embedded release key does not decode")
 	}
-	if !New(DefaultFeedURL, ReleasePublicKey()).Enabled() {
+	if !New(DefaultFeedURL, Trust()).Enabled() {
 		t.Fatal("updater with the built-in feed and key is not enabled")
 	}
 }

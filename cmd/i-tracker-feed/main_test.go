@@ -13,17 +13,34 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"i-tracker/internal/selfupdate"
+	"i-tracker/internal/updatesig"
 )
 
-func newKey(t *testing.T) (ed25519.PublicKey, ed25519.PrivateKey) {
+// caKeys makes the signing keys a build needs, with a CA hierarchy made at runtime.
+func caKeys(t *testing.T, legacy ed25519.PrivateKey) (signingKeys, *updatesig.Trust) {
+	t.Helper()
+	h, err := updatesig.NewHierarchy(time.Now())
+	if err != nil {
+		t.Fatal(err)
+	}
+	trust, err := h.Trust()
+	if err != nil {
+		t.Fatal(err)
+	}
+	return signingKeys{legacy: legacy, ca: h.Signer}, trust
+}
+
+func newKey(t *testing.T) (ed25519.PublicKey, signingKeys) {
 	t.Helper()
 	pub, priv, err := ed25519.GenerateKey(rand.Reader)
 	if err != nil {
 		t.Fatal(err)
 	}
-	return pub, priv
+	keys, _ := caKeys(t, priv)
+	return pub, keys
 }
 
 // fakeBinary writes a stand-in binary for a foreign platform, which the tool
@@ -36,6 +53,8 @@ func fakeBinary(t *testing.T, version string) string {
 	}
 	return path
 }
+
+const testReleaseVersion = "v1.5.1"
 
 const foreignPlatform = "plan9/386/i-tracker"
 
@@ -94,6 +113,32 @@ func TestBuildWritesIntoFeedRoot(t *testing.T) {
 	}
 }
 
+// Both signatures must be in the feed: shipped installations read the old one, new ones only the CA one.
+func TestBuildWritesBothSignatures(t *testing.T) {
+	pub, priv, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	keys, trust := caKeys(t, priv)
+	version := testReleaseVersion
+	dir, err := build(buildOptions{version: version, out: t.TempDir(), bins: []string{foreignPlatform + "=" + fakeBinary(t, version)}}, keys)
+	if err != nil {
+		t.Fatal(err)
+	}
+	readSigned(t, dir, pub)
+	manifest, err := os.ReadFile(filepath.Join(dir, "latest.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	bundle, err := os.ReadFile(filepath.Join(dir, "latest.json"+updatesig.BundleSuffix))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := trust.Verify(bundle, selfupdate.ManifestPurpose, manifest, time.Now(), 0); err != nil {
+		t.Fatalf("CA signature: %v", err)
+	}
+}
+
 func TestBuildRefuses(t *testing.T) {
 	_, priv := newKey(t)
 	good := fakeBinary(t, "v0.0.1")
@@ -122,13 +167,13 @@ func TestBuildRefuses(t *testing.T) {
 func TestReleaseKeyMustMatchEmbeddedKey(t *testing.T) {
 	_, priv := newKey(t)
 	file := filepath.Join(t.TempDir(), "throwaway.key")
-	if err := os.WriteFile(file, []byte(base64.StdEncoding.EncodeToString(priv)), 0o600); err != nil {
+	if err := os.WriteFile(file, []byte(base64.StdEncoding.EncodeToString(priv.legacy)), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	t.Setenv("WEDIGO_RELEASE_KEY", "")
 	t.Setenv("WEDIGO_RELEASE_KEY_FILE", "")
 	got, err := loadKey(file)
-	if err != nil || !got.Equal(priv) {
+	if err != nil || !got.Equal(priv.legacy) {
 		t.Fatalf("loadKey = %v", err)
 	}
 	if _, err := releaseKey(file); err == nil || !strings.Contains(err.Error(), "does not belong") {

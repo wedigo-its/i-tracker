@@ -40,8 +40,10 @@ import (
 	"runtime"
 	"sort"
 	"strings"
+	"time"
 
 	"i-tracker/internal/selfupdate"
+	"i-tracker/internal/updatesig"
 )
 
 var programs = []string{"i-tracker"}
@@ -105,7 +107,7 @@ type buildOptions struct {
 
 // build copies the binaries below o.out, writes the manifest and signs it.
 // It returns the folder holding latest.json, which is always the feed root.
-func build(o buildOptions, priv ed25519.PrivateKey) (string, error) {
+func build(o buildOptions, priv signingKeys) (string, error) {
 	if !selfupdate.IsRelease(o.version) {
 		return "", fmt.Errorf("-version %q is no release version (expected e.g. v0.0.1)", o.version)
 	}
@@ -151,17 +153,24 @@ func build(o buildOptions, priv ed25519.PrivateKey) (string, error) {
 	return dir, writeSigned(dir, m, priv)
 }
 
-// writeSigned writes latest.json and latest.json.sig into dir.
-func writeSigned(dir string, m selfupdate.Manifest, priv ed25519.PrivateKey) error {
+// writeSigned writes latest.json, latest.json.sig for installations shipped before the CA, and the CA signature new ones verify.
+func writeSigned(dir string, m selfupdate.Manifest, priv signingKeys) error {
 	manifest, err := json.MarshalIndent(m, "", "  ")
 	if err != nil {
 		return err
 	}
-	sig := base64.StdEncoding.EncodeToString(ed25519.Sign(priv, manifest))
+	sig := base64.StdEncoding.EncodeToString(ed25519.Sign(priv.legacy, manifest))
+	bundle, err := priv.ca.Sign(selfupdate.ManifestPurpose, manifest)
+	if err != nil {
+		return err
+	}
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return err
 	}
 	if err := os.WriteFile(filepath.Join(dir, "latest.json"), manifest, 0o644); err != nil {
+		return err
+	}
+	if err := os.WriteFile(filepath.Join(dir, "latest.json"+updatesig.BundleSuffix), bundle, 0o644); err != nil {
 		return err
 	}
 	return os.WriteFile(filepath.Join(dir, "latest.json.sig"), []byte(sig+"\n"), 0o644)
@@ -216,15 +225,36 @@ func exists(path string) bool {
 
 // releaseKey loads the signing key and makes sure it belongs to the release
 // key embedded in the binaries.
-func releaseKey(file string) (ed25519.PrivateKey, error) {
+func releaseKey(file string) (signingKeys, error) {
 	priv, err := loadKey(file)
 	if err != nil {
-		return nil, err
+		return signingKeys{}, err
 	}
 	if !bytes.Equal(priv.Public().(ed25519.PublicKey), selfupdate.ReleasePublicKey()) {
-		return nil, errors.New("the private key does not belong to the release key embedded in the binaries; clients would reject the feed")
+		return signingKeys{}, errors.New("the private key does not belong to the release key embedded in the binaries; clients would reject the feed")
 	}
-	return priv, nil
+	dir := os.Getenv("WEDIGO_CA_DIR")
+	if dir == "" && file != "" {
+		dir = filepath.Dir(file)
+	}
+	if dir == "" {
+		return signingKeys{}, errors.New("no CA folder: pass -key as a file next to the CA files, or set WEDIGO_CA_DIR")
+	}
+	ca, warning, err := updatesig.LoadSigner(dir, time.Now())
+	if err != nil {
+		return signingKeys{}, fmt.Errorf("CA signing key: %w", err)
+	}
+	if warning != "" {
+		fmt.Fprintln(os.Stderr, "warning:", warning)
+	}
+	return signingKeys{legacy: priv, ca: ca}, nil
+}
+
+// signingKeys are the two signatures a manifest carries: the single key that already shipped
+// installations verify, and the signing certificate below the wedigo root for all newer ones.
+type signingKeys struct {
+	legacy ed25519.PrivateKey
+	ca     updatesig.Signer
 }
 
 func loadKey(file string) (ed25519.PrivateKey, error) {

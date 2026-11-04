@@ -111,7 +111,7 @@ func newUpdateManager(cfg *config.Config, restart func()) *selfupdate.Manager {
 	interval, _ := cfg.Update.IntervalDuration()
 	// Feed and key are built in; no setting redirects them.
 	return selfupdate.NewManager(selfupdate.Options{
-		Updater:   selfupdate.New(selfupdate.DefaultFeedURL, selfupdate.ReleasePublicKey()),
+		Updater:   selfupdate.New(selfupdate.DefaultFeedURL, selfupdate.Trust()),
 		Mode:      mode,
 		Interval:  interval,
 		Window:    window,

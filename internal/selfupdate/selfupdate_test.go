@@ -6,10 +6,7 @@ package selfupdate
 
 import (
 	"context"
-	"crypto/ed25519"
-	"crypto/rand"
 	"crypto/sha256"
-	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"net/http"
@@ -24,17 +21,32 @@ import (
 	"time"
 
 	"i-tracker/internal/i18n"
+	"i-tracker/internal/updatesig"
 )
 
 const testProgram = "i-tracker"
 
-func newKey(t *testing.T) (ed25519.PublicKey, ed25519.PrivateKey) {
+// newKey makes a whole CA hierarchy at runtime; tests never touch the real one.
+func newKey(t *testing.T) (*updatesig.Trust, updatesig.Signer) {
 	t.Helper()
-	pub, priv, err := ed25519.GenerateKey(rand.Reader)
+	h, err := updatesig.NewHierarchy(time.Now())
 	if err != nil {
-		t.Fatalf("generate key: %v", err)
+		t.Fatalf("create hierarchy: %v", err)
 	}
-	return pub, priv
+	trust, err := h.Trust()
+	if err != nil {
+		t.Fatalf("trust: %v", err)
+	}
+	return trust, h.Signer
+}
+
+func signManifest(t *testing.T, priv updatesig.Signer, data []byte) string {
+	t.Helper()
+	bundle, err := priv.Sign(ManifestPurpose, data)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return string(bundle)
 }
 
 // feed is a fake release feed. Every field can be changed per test before the
@@ -47,7 +59,7 @@ type feed struct {
 	downloads atomic.Int32
 }
 
-func signedFeed(t *testing.T, priv ed25519.PrivateKey, m Manifest) *feed {
+func signedFeed(t *testing.T, priv updatesig.Signer, m Manifest) *feed {
 	t.Helper()
 	data, err := json.Marshal(m)
 	if err != nil {
@@ -55,7 +67,7 @@ func signedFeed(t *testing.T, priv ed25519.PrivateKey, m Manifest) *feed {
 	}
 	return &feed{
 		manifest:  data,
-		signature: base64.StdEncoding.EncodeToString(ed25519.Sign(priv, data)),
+		signature: signManifest(t, priv, data),
 		sigStatus: http.StatusOK,
 	}
 }
@@ -78,7 +90,7 @@ func (f *feed) handle(mux *http.ServeMux, dir string) {
 	mux.HandleFunc("GET "+prefix+"latest.json", func(w http.ResponseWriter, r *http.Request) {
 		_, _ = w.Write(f.manifest)
 	})
-	mux.HandleFunc("GET "+prefix+"latest.json.sig", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("GET "+prefix+"latest.json"+updatesig.BundleSuffix, func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(f.sigStatus)
 		_, _ = w.Write([]byte(f.signature + "\n"))
 	})
@@ -102,6 +114,53 @@ func digest(data []byte) string {
 }
 
 // Check
+
+// A feed that only offers the old single-key signature must not be accepted by a new binary.
+func TestCheckRefusesFeedWithoutCASignature(t *testing.T) {
+	pub, priv := newKey(t)
+	f := signedFeed(t, priv, Manifest{Version: "1.4.0"})
+	f.sigStatus = http.StatusNotFound
+	if rel, err := New(f.serve(t).URL, pub).Check(context.Background(), "1.0.0"); err == nil {
+		t.Fatalf("Check accepted a feed without CA signature: %+v", rel)
+	}
+}
+
+// A manifest validly signed for another wedigo product must not pass here.
+func TestCheckRefusesManifestOfOtherProduct(t *testing.T) {
+	pub, priv := newKey(t)
+	f := signedFeed(t, priv, Manifest{Version: "1.4.0"})
+	bundle, err := priv.Sign(updatesig.Purpose("update-manifest", "another-product"), f.manifest)
+	if err != nil {
+		t.Fatal(err)
+	}
+	f.signature = string(bundle)
+	if rel, err := New(f.serve(t).URL, pub).Check(context.Background(), "1.0.0"); err == nil {
+		t.Fatalf("Check accepted the manifest of another product: %+v", rel)
+	}
+}
+
+// Once a newer revocation list was seen, a feed cannot go back to an older one.
+func TestCheckRemembersRevocationList(t *testing.T) {
+	exe := filepath.Join(t.TempDir(), "program")
+	old := executable
+	executable = func() (string, error) { return exe, nil }
+	t.Cleanup(func() { executable = old })
+
+	pub, priv := newKey(t)
+	f := signedFeed(t, priv, Manifest{Version: "1.4.0"})
+	if _, err := New(f.serve(t).URL, pub).Check(context.Background(), "1.0.0"); err != nil {
+		t.Fatalf("Check: %v", err)
+	}
+	if got := updatesig.ReadFloor(exe + ".update-crl"); got != 1 {
+		t.Fatalf("stored list number = %d, want 1", got)
+	}
+	if err := updatesig.WriteFloor(exe+".update-crl", 5); err != nil {
+		t.Fatal(err)
+	}
+	if rel, err := New(f.serve(t).URL, pub).Check(context.Background(), "1.0.0"); err == nil {
+		t.Fatalf("Check accepted an older revocation list: %+v", rel)
+	}
+}
 
 func TestCheckAcceptsSignedManifest(t *testing.T) {
 	pub, priv := newKey(t)
@@ -139,10 +198,10 @@ func TestCheckRejectsUntrustedManifest(t *testing.T) {
 			f.manifest = []byte(strings.Replace(string(f.manifest), "1.4.0", "9.9.9", 1))
 		}, "err.update.bad_signature"},
 		"signed by other key": {func(f *feed) {
-			f.signature = base64.StdEncoding.EncodeToString(ed25519.Sign(otherPriv, f.manifest))
+			f.signature = signManifest(t, otherPriv, f.manifest)
 		}, "err.update.bad_signature"},
 		"empty signature":     {func(f *feed) { f.signature = "" }, "err.update.bad_signature"},
-		"malformed signature": {func(f *feed) { f.signature = "%%% not base64 %%%" }, "err.update.decode_signature"},
+		"malformed signature": {func(f *feed) { f.signature = "%%% no bundle %%%" }, "err.update.bad_signature"},
 		"missing signature":   {func(f *feed) { f.sigStatus = http.StatusNotFound }, "err.update.fetch_signature"},
 	}
 	for name, tc := range cases {
@@ -164,7 +223,7 @@ func TestCheckRejectsSignedButMalformedManifest(t *testing.T) {
 	pub, priv := newKey(t)
 	f := signedFeed(t, priv, Manifest{})
 	f.manifest = []byte("{not json")
-	f.signature = base64.StdEncoding.EncodeToString(ed25519.Sign(priv, f.manifest))
+	f.signature = signManifest(t, priv, f.manifest)
 
 	if _, err := New(f.serve(t).URL, pub).Check(context.Background(), "1.0.0"); err == nil {
 		t.Fatal("Check accepted a manifest that is not valid JSON")
@@ -176,7 +235,6 @@ func TestUpdaterDisabledWithoutFeedOrKey(t *testing.T) {
 	cases := map[string]*Updater{
 		"nil updater": nil,
 		"no feed":     New("", pub),
-		"short key":   New("https://updates.example.com", pub[:16]),
 		"no key":      New("https://updates.example.com", nil),
 	}
 	for name, u := range cases {
