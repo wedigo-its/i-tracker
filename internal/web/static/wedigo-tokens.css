@@ -15,7 +15,8 @@
   --fs-base: 14px;
   /* Type scale: fixed sizes, never em, so nesting cannot shrink text.
      Weights 400 and 600 only: Segoe UI has no 500, and its 700 is a separately
-     drawn face that looks like a second typeface next to 600. */
+     drawn face that looks like a second typeface next to 600. The one exception
+     is the KPI value (--fw-num), digits standing on their own. */
   --fs-xs: 12px;   --lh-xs: 16px;    /* badges, table header (uppercase), overlines, legends, footnotes */
   --fs-hint: 13px; --lh-hint: 20px;  /* hints and secondary text */
   --fs-sm: 14px;   --lh-sm: 20px;    /* body text, cells, labels, inputs, buttons, menus, card titles (600) */
@@ -23,6 +24,7 @@
   --fs-lg: 18px;   --lh-lg: 28px;    /* dialog title */
   --fs-xl: 24px;   --lh-xl: 32px;    /* page title, one per page */
   --fs-num: 28px;  --lh-num: 36px;   /* KPI value, tabular-nums */
+  --fw-num: 700;                     /* KPI value weight */
   /* First-generation em tokens, still used by i-Tracker. */
   --fs-kpi: 1.6em;
   --fs-title: 1.1em;

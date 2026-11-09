@@ -186,7 +186,7 @@ main { flex: 1; width: 100%; max-width: var(--max); margin: 0 auto; }
 .sum-card { flex: 1; min-width: 140px; border-radius: var(--r-lg); padding: 16px 18px; text-align: center;
             background: var(--surface); border: 1px solid var(--border); border-top: 3px solid var(--accent);
             box-shadow: var(--card-shadow); }
-.sum-card .val { font-size: var(--fs-kpi); font-weight: 700; color: var(--accent); font-variant-numeric: tabular-nums; }
+.sum-card .val { font-size: var(--fs-kpi); font-weight: var(--fw-num); color: var(--accent); font-variant-numeric: tabular-nums; }
 .sum-card .lbl { font-size: 0.75em; color: var(--muted); margin-top: 4px; }
 .sum-card .sub { font-size: 0.72em; color: var(--faint); margin-top: 2px; }
 .sum-card.warn { border-top-color: var(--warn); } .sum-card.warn .val { color: var(--warn); }
