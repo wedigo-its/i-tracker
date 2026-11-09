@@ -1,5 +1,5 @@
 /* wedigo-tokens.css — shared design tokens of all wedigo products
-   Version: 2026.10.28 · Reference: Spherifyer
+   Version: 2026.11.09 · Reference: Spherifyer
    Load BEFORE the product CSS. Hex colours belong only in this file.
    Theme: <html data-theme="dark|light">; without it prefers-color-scheme applies.
    License accent: products may override --accent-rgb via /theme.css. */
@@ -13,9 +13,20 @@
   --font: ui-sans-serif, system-ui, "Segoe UI", Roboto, sans-serif, "Apple Color Emoji", "Segoe UI Emoji";
   --mono: ui-monospace, "Cascadia Code", Consolas, "SF Mono", monospace;
   --fs-base: 14px;
-  --fs-kpi: 1.6em;      /* KPI value, 700, tabular-nums */
-  --fs-title: 1.1em;    /* section title, 700, 4px accent bar on the left */
-  --fs-th: .74em;       /* table header, uppercase */
+  /* Type scale: fixed sizes, never em, so nesting cannot shrink text.
+     Weights 400 and 600 only: Segoe UI has no 500, and its 700 is a separately
+     drawn face that looks like a second typeface next to 600. */
+  --fs-xs: 12px;   --lh-xs: 16px;    /* badges, table header (uppercase), overlines, legends, footnotes */
+  --fs-hint: 13px; --lh-hint: 20px;  /* hints and secondary text */
+  --fs-sm: 14px;   --lh-sm: 20px;    /* body text, cells, labels, inputs, buttons, menus, card titles (600) */
+  --fs-md: 16px;   --lh-md: 24px;    /* section title, 600, 3px accent bar on the left */
+  --fs-lg: 18px;   --lh-lg: 28px;    /* dialog title */
+  --fs-xl: 24px;   --lh-xl: 32px;    /* page title, one per page */
+  --fs-num: 28px;  --lh-num: 36px;   /* KPI value, tabular-nums */
+  /* First-generation em tokens, still used by i-Tracker. */
+  --fs-kpi: 1.6em;
+  --fs-title: 1.1em;
+  --fs-th: .74em;
   --max: 1152px;
   --blur: 16px;
   --accent-rgb: 59 130 246;          /* #3b82f6 */
