@@ -109,7 +109,7 @@ Unter **Peering-Map** sehen Sie, über welche Stationen Ihre Daten zu einem Mess
 
 ![Weg zum Ziel auf der Karte](i-tracker-peering.webp)
 
-> Die Wegverfolgung funktioniert mit IPv4-Adressen. Manche Router im Internet antworten nicht; dann fehlen einzelne Stationen. Das ist normal.
+> Die Wegverfolgung funktioniert mit IPv4-Adressen. Manche Router im Internet antworten nicht. In diesem Fall fehlen einzelne Stationen. Das ist normal.
 
 ## geoip | Standortdaten
 
@@ -136,7 +136,7 @@ Im Bereich **Admin** räumen Sie auch auf: Messungen und Wegverfolgungen älter 
 
 ## updates | Updates
 
-i-Tracker hält sich selbst aktuell. Es schaut regelmäßig auf www.wedigo.net nach, ob es eine neue Version gibt, prüft, dass sie wirklich von uns stammt, und installiert sie. Ihre Daten bleiben erhalten; die Datenbank wird beim Start bei Bedarf automatisch angepasst.
+i-Tracker hält sich selbst aktuell. Es schaut regelmäßig auf www.wedigo.net nach, ob es eine neue Version gibt, prüft, dass sie wirklich von uns stammt, und installiert sie. Ihre Daten bleiben erhalten. Die Datenbank wird beim Start bei Bedarf automatisch angepasst.
 
 Wie das abläuft, legen Sie in der Einstellung `update.mode` fest:
 
@@ -146,11 +146,11 @@ Wie das abläuft, legen Sie in der Einstellung `update.mode` fest:
 
 Mit `update.window` legen Sie eine Uhrzeit fest, zu der installiert werden darf, zum Beispiel `"02:00-05:00"`. Den Stand sehen Administratoren unter **Admin → Software-Update** und können dort auch von Hand prüfen und installieren.
 
-> Automatisch installiert wird nur, wenn i-Tracker als Dienst läuft und in seinen Programmordner schreiben darf. Starten Sie es von Hand im Konsolenfenster, meldet es neue Versionen nur; nach einer Installation von Hand starten Sie es neu.
+> Automatisch installiert wird nur, wenn i-Tracker als Dienst läuft und in seinen Programmordner schreiben darf. Starten Sie es von Hand im Konsolenfenster, meldet es neue Versionen nur. Nach einer Installation von Hand starten Sie es neu.
 
 Alle Versionen kommen aus derselben Quelle, auch der Wechsel auf eine neue Hauptversion (etwa von 0.x auf 1.0) ist ein gewöhnliches Update.
 
-Mit Docker aktualisiert sich i-Tracker nicht selbst; dort bauen Sie das Image neu:
+Mit Docker aktualisiert sich i-Tracker nicht selbst. Dort bauen Sie das Image neu:
 
 ```docker
 docker compose up -d --build
@@ -183,7 +183,7 @@ Die Standortdaten im Ordner `geoip` lädt i-Tracker bei Bedarf neu herunter.
 
 **„iperf3 nicht gefunden“:** Installieren Sie iperf3 über den Statuspunkt oder von Hand, oder tragen Sie den Pfad in `iperf.path` ein. Nach einer Installation den Dienst neu starten.
 
-**Messungen schlagen fehl:** Läuft auf dem Messserver `iperf3 -s`, und ist dessen Port erreichbar? Öffentliche Server sind oft belegt; dann hilft ein späterer Versuch oder ein anderer Server.
+**Messungen schlagen fehl:** Läuft auf dem Messserver `iperf3 -s`, und ist dessen Port erreichbar? Öffentliche Server sind oft belegt. In diesem Fall hilft ein späterer Versuch oder ein anderer Server.
 
 **Die Oberfläche ist von anderen Rechnern nicht erreichbar:** Port 8000 in der Firewall freigeben und prüfen, dass `web.listen` auf `0.0.0.0:8000` steht.
 
@@ -228,7 +228,7 @@ Diese Befehle geben Sie im Konsolenfenster im Programmordner ein.
 {{cli}}
 
 - -config :: Eine andere Einstellungsdatei verwenden.
-- -no-tui :: Ohne Wirkung; nur vorhanden, damit Aufrufe wie bei den anderen wedigo-Programmen funktionieren.
+- -no-tui :: Ohne Wirkung. Die Option ist nur vorhanden, damit Aufrufe wie bei den anderen wedigo-Programmen funktionieren.
 - -version :: Die Versionsnummer anzeigen.
 - service install :: Als Dienst einrichten (mit Administratorrechten).
 - service uninstall :: Den Dienst wieder entfernen.
