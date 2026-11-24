@@ -1,7 +1,7 @@
 // state.go
 // Update state kept next to the executable: the pending update awaiting its
 // first healthy run, and a version that was rolled back and is skipped.
-// Version: 2026.10.28
+// Version: 2026.11.24
 
 package selfupdate
 
@@ -31,6 +31,10 @@ type state struct {
 	// Skip is a version that failed to start and was rolled back. Automatic
 	// updates leave it alone; a manual install or a newer release clears it.
 	Skip string `json:"skip,omitempty"`
+	// Runs is the version this installation runs and RunsSince since when: an automatic install waits
+	// Options.Delay after it (2026-11-24).
+	Runs      string    `json:"runs,omitempty"`
+	RunsSince time.Time `json:"runs_since,omitzero"`
 }
 
 type pending struct {
@@ -69,7 +73,7 @@ func loadState() (state, string, error) {
 }
 
 func saveState(path string, st state) error {
-	if st.Pending == nil && st.Skip == "" {
+	if st.Pending == nil && st.Skip == "" && st.Runs == "" {
 		if err := os.Remove(path); err != nil && !errors.Is(err, fs.ErrNotExist) {
 			return err
 		}
@@ -106,6 +110,21 @@ func clearPending() {
 func skipped() string {
 	st, _, _ := loadState()
 	return st.Skip
+}
+
+// runsSince is since when this installation runs version current: from now for another version than the last
+// time, by whatever way it came, and for a clock that went back. Where the state cannot be written, the error
+// comes with now.
+func runsSince(current string, now time.Time) (time.Time, error) {
+	st, path, err := loadState()
+	if err != nil {
+		return now, err
+	}
+	if st.Runs == current && !st.RunsSince.IsZero() && !st.RunsSince.After(now) {
+		return st.RunsSince, nil
+	}
+	st.Runs, st.RunsSince = current, now.UTC()
+	return now, saveState(path, st)
 }
 
 // Recovery reports what Recover did.

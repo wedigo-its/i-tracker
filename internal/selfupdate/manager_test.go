@@ -329,3 +329,56 @@ func TestManagerOffAndContainer(t *testing.T) {
 		})
 	}
 }
+
+// An installation installs a new release on its own Delay after the running version came, and another release meanwhile does not begin the wait anew (2026-11-24). The time outlives
+// the process; another version, or a clock that went back, counts from now.
+func TestManagerInstallsOneUpdateADay(t *testing.T) {
+	pub, priv := newKey(t)
+	useExecutable(t, "old")
+	publish := func() *Manager {
+		m := Manifest{Version: "1.1.0", Binaries: map[string]Binary{platformKey(testProgram): {URL: "bin", SHA256: digest([]byte("x"))}}}
+		f := signedFeed(t, priv, m)
+		f.binary = []byte("x")
+		srv := f.serve(t)
+		return NewManager(Options{Updater: New(srv.URL, pub), Mode: ModeAuto, Program: testProgram, Current: "1.0.0", Restart: func() {}, Delay: DefaultDelay})
+	}
+	now := time.Now()
+	old := publish()
+	old.tick(context.Background())
+	if st := old.Status(); !st.Available || st.Installed != "" {
+		t.Fatalf("on the first day: %+v, want the release reported but waiting", st)
+	}
+	// The process comes back a day later: the time was kept.
+	st, path, err := loadState()
+	if err != nil || st.Runs != "1.0.0" || st.RunsSince.IsZero() {
+		t.Fatalf("state %+v %v", st, err)
+	}
+	st.RunsSince = now.Add(-DefaultDelay + time.Minute)
+	if err := saveState(path, st); err != nil {
+		t.Fatal(err)
+	}
+	almost := publish()
+	almost.tick(context.Background())
+	if st := almost.Status(); st.Installed != "" {
+		t.Fatalf("a minute before the day is over: %+v", st)
+	}
+	st.RunsSince = now.Add(-DefaultDelay - time.Minute)
+	if err := saveState(path, st); err != nil {
+		t.Fatal(err)
+	}
+	fresh := publish()
+	fresh.tick(context.Background())
+	if st := fresh.Status(); st.Installed != "1.1.0" {
+		t.Fatalf("after the day: %+v, want the release installed", st)
+	}
+	if since, err := runsSince("1.1.0", now); err != nil || !since.Equal(now) {
+		t.Fatalf("another version counts from %v %v, want now", since, err)
+	}
+	if since, err := runsSince("1.1.0", now.Add(time.Hour)); err != nil || since.Sub(now).Abs() > time.Second {
+		t.Fatalf("an hour later it counts from %v %v", since, err)
+	}
+	back := now.Add(-30 * 24 * time.Hour)
+	if since, err := runsSince("1.1.0", back); err != nil || !since.Equal(back) {
+		t.Fatalf("the clock went back: %v %v", since, err)
+	}
+}

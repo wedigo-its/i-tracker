@@ -1,7 +1,7 @@
 // manager.go
 // Update modes, maintenance window and the background loop that checks the
 // feed and installs releases automatically
-// Version: 2026.10.28
+// Version: 2026.11.24
 
 package selfupdate
 
@@ -130,6 +130,9 @@ type Options struct {
 	// Container disables the updater: the image is updated instead.
 	Container bool
 	// Audit records an installed update; optional.
+	// Delay is how long this installation stays on a version before it installs another on its own
+	// (DefaultDelay, 2026-11-24); a manual install does not wait. Zero: no wait.
+	Delay  time.Duration
 	Audit  func(ctx context.Context, from, to string, automatic bool)
 	Logger *slog.Logger
 }
@@ -168,6 +171,10 @@ type Manager struct {
 	// writable is the result of the folder probe, taken once.
 	writable     error
 	writableOnce sync.Once
+	// since is when the running version came, for the wait; zero until it was asked for.
+	since time.Time
+	// waitLogged is the release whose wait was last logged.
+	waitLogged string
 }
 
 // NewManager returns a Manager. A zero Interval means six hours.
@@ -320,6 +327,9 @@ func (m *Manager) Run(ctx context.Context) {
 		return
 	}
 
+	if m.o.Mode == ModeAuto && m.o.Restart != nil && IsRelease(m.o.Current) {
+		m.readyAt(time.Now()) // since when this version runs counts from the start, not from the next release
+	}
 	// The first check waits a minute so a crash-looping start does not hit the
 	// feed on every attempt; later ticks are frequent enough to catch a short
 	// maintenance window, while the feed itself is queried once per Interval.
@@ -376,6 +386,16 @@ func (m *Manager) tick(ctx context.Context) {
 		}
 		return
 	}
+	if until := m.readyAt(time.Now()); time.Now().Before(until) {
+		m.mu.Lock()
+		log := m.waitLogged != st.Latest
+		m.waitLogged = st.Latest
+		m.mu.Unlock()
+		if log {
+			m.o.Logger.Info("self-update: the new release waits after the last update", "latest", st.Latest, "until", until)
+		}
+		return
+	}
 	installCtx, cancel := context.WithTimeout(ctx, 10*time.Minute)
 	defer cancel()
 	if _, err := m.install(installCtx, true); err != nil {
@@ -394,4 +414,25 @@ func proxyFor(rawURL string) string {
 		return p.Redacted()
 	}
 	return "none (direct connection)"
+}
+
+// DefaultDelay is how long an installation stays on a version before it installs another on its own: one update
+// a day, however often releases come (2026-11-24, as the other products; before, at once).
+const DefaultDelay = 24 * time.Hour
+
+// readyAt is when a release may install on its own: Delay after the running version came.
+func (m *Manager) readyAt(now time.Time) time.Time {
+	if m.o.Delay <= 0 {
+		return time.Time{}
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.since.IsZero() || m.since.After(now) {
+		since, err := runsSince(m.o.Current, now)
+		if err != nil {
+			m.o.Logger.Warn("self-update: could not record since when this version runs; the wait counts from this start", "error", err)
+		}
+		m.since = since
+	}
+	return m.since.Add(m.o.Delay)
 }

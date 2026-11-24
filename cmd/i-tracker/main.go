@@ -111,6 +111,7 @@ func newUpdateManager(cfg *config.Config, restart func()) *selfupdate.Manager {
 	interval, _ := cfg.Update.IntervalDuration()
 	// Feed and key are built in; no setting redirects them.
 	return selfupdate.NewManager(selfupdate.Options{
+		Delay:     selfupdate.DefaultDelay, // 24 h after the last update (2026-11-24)
 		Updater:   selfupdate.New(selfupdate.DefaultFeedURL, selfupdate.Trust()),
 		Mode:      mode,
 		Interval:  interval,
